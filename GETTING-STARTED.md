@@ -154,6 +154,7 @@ Claude asks if something is missing (which artist, which date, which file).
 | **"The caption says 'Waterhose', fix it"** | Re-renders with that word replaced everywhere. Uses the cached transcript, so it's fast. | same file, overwritten (or a `v2` if you ask) |
 | **"Cut 20:03 to 20:29 out, that's us talking to the camera guy"** | Adds a manual cut (times from the original file) and re-renders. | same as above |
 | **"Make the 1080p version"** | Quick version on a laptop (minutes, a bit soft). The proper AI upscale runs on the GPU box and takes hours. Then the captions and intro are drawn again at 1080p so the text stays sharp. | `~/Movies/waterhouse/out/<name>.edited.1080p.mp4` |
+| **"Run these 8 Dropbox videos on the GPU box"** (paste the links, one per guest) | Claude writes a batch list on the GPU box (never in the repo: the links are private), downloads every video, and makes each edit's plan. You read the plans, say which are fine, and it renders those with the Fuse intro and captions, plus a small preview of each. One that fails doesn't stop the others; asking again carries on where it stopped. No 1080p unless you ask for it per video, and then you first get a 25-second before/after sample to approve. | `C:\Users\<you>\Videos\sesh-out\<name>.edited.mp4` and `<name>.preview.mp4` on the GPU box |
 | **"Make a new stinger: a cassette tape rewinding into the logo"** | Claude builds it in the house style, gives it a one-word name (say, *Rewind*), adds it to [TEMPLATES.md](TEMPLATES.md) and tells you the name. Share the name in WhatsApp so others can ask for "the Rewind stinger". | `out/Bumper-rewind.webm` once rendered |
 | **"Make a 9:16 reel from the best 30 seconds of the Boogie interview"** | Claude reads the transcript, proposes a 30-second span, and renders a vertical reel that cuts between the speakers with big captions and an end card. See the note below. | `out/reels/<slug>.mp4` |
 
@@ -215,6 +216,40 @@ It never cuts those by itself. Watch them and tell Claude what to do:
 - *"Put a title card 'How did you first get into electronic music?' at 0:01"*
 
 Then *"render it"*.
+
+### A batch of interviews on the GPU box
+
+For several recordings at once, send Claude the Dropbox links (a session on
+the GPU box, which Dean sets up) and say *"run these"*. Claude runs
+`sesh-batch` (reference: `longform/README.md`, "A batch of interviews"):
+
+1. It downloads each video into `C:\Users\<you>\Videos\sesh-in\` and makes
+   its plan: `<name>.review.txt` in `sesh-out\`, the same plan and review list
+   as above.
+2. You read the plans and say which are fine (*"oscar and mira are good,
+   cut 20:03 to 20:29 in mira first"*). Say *"don't stop for review"* to
+   skip this step.
+3. It renders those: the Fuse intro, no outro, captions burned in, and a
+   **preview** (`<name>.preview.mp4`, 360p, about 1.3 MB per minute) to check
+   timing and sound.
+4. Copy the previews to your Mac in Terminal (`gpu` is the ssh name Dean gave
+   the box):
+
+   ```sh
+   scp "gpu:Videos/sesh-out/*.preview.mp4" ~/Movies/waterhouse/out/
+   ```
+
+No 1080p version unless you ask for one for a video. Then it first makes a
+25-second sample, the original and the upscale side by side
+(`<name>.upscale-compare.mp4`), and waits until you say go: the full upscale
+takes hours.
+
+Setting up the GPU box (done once, by Dean): `bun install` at the repo root,
+`cd longform; uv sync` (installs the CUDA build of torch, so transcription
+runs on the graphics card), then `bun run render:intro` with the portable
+Node 22 first on PATH (the system Node is too old):
+`$env:PATH = "C:\Users\<you>\tools\node-v22.23.5-win-x64;" + $env:PATH`.
+`claude` must be logged in there too.
 
 ---
 

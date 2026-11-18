@@ -35,3 +35,15 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# sesh-batch (#47): manifests hold Dropbox share links, status files and outputs name
+# private recordings. Keep manifests outside the repo anyway; these catch strays.
+batch*.json
+*.batch.json
+*.status.json
+*.part
+*.srt
+*.decisions.json
+*.review.txt
+*.work/
+*.upscale-work/

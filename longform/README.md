@@ -181,9 +181,20 @@ GPU box layout:
 | `C:\Users\<you>\Videos\sesh-out\` | **outbox**: edits, decisions, upscales |
 | `C:\Users\<you>\tools\realesrgan\` | Real-ESRGAN ncnn-vulkan (Windows build, v0.2.5.0). User env `SESH_REALESRGAN` points here |
 
-ffmpeg, uv, git and the `claude` CLI are on the user PATH. torch there is the CPU build
-(the code picks MPS or CPU), so transcription is slower than on the Mac; upscaling uses the
-GPU through Vulkan.
+ffmpeg, uv, git and the `claude` CLI are on the user PATH. On Windows `uv sync` installs
+the CUDA build of torch (`[tool.uv.sources]` in `pyproject.toml`, cu124 wheels; macOS and
+Linux keep PyPI's torch), and transcription runs on the RTX 3070 in fp16. On a 2:42 test
+clip the speech model loaded in ~5 s (~20 s cold), transcribed in 7 s and aligned in 2 s:
+roughly 3 s of GPU time per minute of interview. Check with
+`uv run python -c "import torch; print(torch.cuda.is_available())"`; sesh-edit logs
+`asr on cuda (float16)`. Upscaling uses the GPU through Vulkan.
+
+Remotion needs Node 22 and the box's system Node is v14. Before `bun run render:intro`, put
+the portable one first on PATH in that PowerShell window:
+
+```powershell
+$env:PATH = "C:\Users\<you>\tools\node-v22.23.5-win-x64;C:\Users\<you>\.bun\bin;" + $env:PATH
+```
 
 ### Download from a Dropbox share link
 
@@ -203,6 +214,70 @@ On Mac/Linux it's the same `curl -L -o … "…&dl=1"`.
 - A share link is readable by anyone who has it. Expire or delete it after the pull.
 - Disk: C: had ~76 GB free on 2026-11-04. x4plus works in chunks (~4 GB of PNGs at a time),
   but don't run several upscales at once.
+
+### A batch of interviews: `sesh-batch`
+
+`sesh-batch` runs a list of share links through download → `sesh-edit --review` → approval →
+render → a small preview, one job after another, and remembers where each job got to. The
+manifest is a JSON file **outside the repo**: it holds share links. (`batch*.json`,
+`*.batch.json` and `*.status.json` are gitignored, and `scripts/no-tracked-private.test.ts`
+fails if a manifest or a real share link is committed.) E.g. `C:\Users\<you>\Videos\week47.batch.json`:
+
+```json
+{"jobs": [
+  {"name": "oscar", "url": "https://www.dropbox.com/scl/fi/<id>/oscar.mp4?rlkey=<key>&dl=0"},
+  {"name": "mira",  "url": "https://www.dropbox.com/scl/fi/<id>/mira.mov?rlkey=<key>&dl=0",
+   "args": ["--cut", "20:03-20:29", "--replace", "Waterhose=Waterhouse"], "upscale": true}
+]}
+```
+
+```powershell
+$m = "C:\Users\<you>\Videos\week47.batch.json"
+uv run sesh-batch $m                          # download + plan every job; render the approved ones
+uv run sesh-batch $m --approve oscar          # after reading oscar.review.txt (or --approve all)
+uv run sesh-batch $m --yes                    # no review stop: plan and render straight through
+uv run sesh-batch $m --approve-upscale mira   # after watching mira.upscale-compare.mp4
+uv run sesh-batch $m --status                 # where every job is
+```
+
+| job key | default | |
+|---|---|---|
+| `name` | required | file name for everything the job writes (letters, digits, `.` `_` `-`) |
+| `url` | required | Dropbox share link (`dl=0` becomes `dl=1`, `rlkey=` is kept), any http(s) link, or a local path |
+| `args` | `[]` | extra `sesh-edit` flags: `--cut`, `--replace`, `--move-to-front`, `--title-card`, `--av-offset`, ... |
+| `approved` | false | render without stopping for review |
+| `upscale` | off | `true`/`"x4plus"` or `"lanczos"`: after the preview, make a comparison sample and stop |
+| `upscale_approved` | false | skip the stop after the sample |
+| `sample_start` / `sample_duration` | 25% in / 25 s | where the sample comes from (clean-cut time). x4plus takes ~1 s per frame on the 3070, so 25 s is ~10 min |
+
+Top-level `in_dir` / `out_dir` override `~\Videos\sesh-in` / `~\Videos\sesh-out`
+(`~/Movies/waterhouse/in` / `out` on a Mac).
+
+What each job writes into `out_dir`:
+
+| file | |
+|---|---|
+| `<name>.review.txt` | the plan and review list from `sesh-edit --review`: read it before approving |
+| `<name>.edited.mp4`, `.edited.srt`, `.decisions.json`, `.clean.mp4` | as from sesh-edit: Fuse intro, no outro, captions burned in. Rendered from the reviewed decisions (`--from-decisions`), so it is exactly the plan that was approved |
+| `<name>.preview.mp4` | the edit at 360p, mono audio, ~180 kbit/s (~1.3 MB per minute): for checking timing and sound |
+| `<name>.upscale-compare.mp4` | only with `upscale`: the sample side by side (centre half of the frame), the original scaled up plainly on the left, the upscale on the right |
+| `<name>.edited.1080p.mp4` | only after `--approve-upscale`: `sesh-upscale` + `sesh-overlay` |
+| `<name>.log` | everything the tools printed |
+
+State is in `<manifest>.status.json` beside the manifest: `queued`, `downloading`, `planning`,
+`awaiting-review`, `rendering`, `previewing`, `upscale-sample`, `awaiting-upscale-approval`,
+`upscaling`, `done` or `failed` (with the error). Re-running the manifest skips finished
+work: a download that is there and readable, a plan made with the same `args`, a render of
+that plan. A failed job is recorded and the others carry on; re-run to retry it (a broken-off
+download resumes where the server allows). Changing a job's `args` re-plans it (cached
+transcript, ~40 s) and waits for a new approval; changing `upscale` makes a new sample.
+`--yes` never approves an upscale. `--cleanup` deletes each job's `.work/` cache after its
+preview (and the clean cut, unless the job is upscaled): saves disk, but a later re-plan
+transcribes again. `--only NAME` runs one job.
+
+Run it from a session that stays open (a T3 thread on the GPU box, or a held-open ssh): a
+detached `Start-Process` over ssh dies. Pull previews to the Mac with
+`scp <gpu-box>:Videos/sesh-out/<name>.preview.mp4 ~/Movies/waterhouse/out/`.
 
 ### Full run on the GPU box (trim → upscale → caption)
 

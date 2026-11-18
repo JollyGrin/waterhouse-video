@@ -70,7 +70,8 @@ even if the user asks you to skip them:
    footage, photos, music or renders (`.mp4 .mov .webm .mkv .wav .mp3 .flac
    .aiff .jpg .jpeg .png`) beyond what is already tracked; transcripts,
    captions (`.srt`), `.decisions.json` files or `*.work/` folders from
-   interviews; Dropbox links; tokens, `.env` files or anything that looks
+   interviews; Dropbox links or `sesh-batch` manifests and their
+   `.status.json`; tokens, `.env` files or anything that looks
    like a password. Details under [Conventions](#conventions).
 6. **Bun at the root, uv in `longform/`.** Never npm/npx/yarn/pnpm, never
    pip.
@@ -141,6 +142,7 @@ graphics in sesh-edit.
 | Fix captions or a misheard word | sesh-edit | `cd longform && uv run sesh-edit <in> -o <out>.edited.mp4 --replace Waterhose=Waterhouse` (cached, ~40 s). Or edit the decisions file and use `--from-decisions` | overwrites the edit |
 | Manual cut, move the intro to the front, insert a clip, title card | sesh-edit | `--cut 20:03-20:29`, `--move-to-front`, `--insert-clip`, `--title-card` (times from the input file) | |
 | Make the 1080p version | sesh-edit | `uv run sesh-upscale <out>.clean.mp4 -o <out>.clean.1080p.mp4 --method lanczos` (laptop, minutes) or `--method x4plus` (GPU box, hours), then `uv run sesh-overlay <out>.decisions.json <out>.clean.1080p.mp4 -o <out>.edited.1080p.mp4` | `<out>.edited.1080p.mp4` |
+| Several recordings at once ("run these 8 Dropbox videos") | sesh-batch (GPU box) | Write a manifest **outside the repo** (`C:\Users\<you>\Videos\<batch>.batch.json`: `{"jobs": [{"name", "url", "args"?, "upscale"?}]}`; it holds share links), then `cd longform; uv run sesh-batch <manifest>`. It stops at `awaiting-review`: show the user each `<name>.review.txt`, then `--approve <name>` (`--yes` skips review). No upscale unless a job has `"upscale": true`; that stops after a comparison sample until `--approve-upscale <name>`. `--status` shows every job. Reference: `longform/README.md`, "A batch of interviews" | `sesh-out\<name>.edited.mp4` + `.preview.mp4` (+ `.review.txt`, `.log`); state in `<manifest>.status.json` |
 | Change the intro itself (Fuse) | Remotion `IdentFuse-16x9` | Edit `src/ident/Fuse.tsx` (preview in Studio), then `bun run render:intro`: renders it into `longform/src/sesh_edit/assets/intro/` (gitignored). If the frame where the rings open moves from 118, update `OPEN_FRAME` in `scripts/render-intro.ts` | `fuse-16x9.{webm,flac,json}` |
 | Add or change the intro on an edited video | sesh-edit | Default intro is Fuse, built by `bun run render:intro` (run it once before the first edit; sesh-edit says so if it's missing). `--intro FILE` for another alpha video, `--no-intro` for none. A new ident is made in Remotion first; see [Hand-off](#hand-off-remotion--sesh-edit) | |
 | Session logo reveal (masked open/close) | Remotion `SessionOpen` / `SessionClose` | Needs `public/session/head.mp4` / `tail.mp4`; see [Session logo reveal](#session-logo-reveal) | |
@@ -257,10 +259,12 @@ stand-in. Scheduled cover sync is an example launchd wrapper in
   minute), Studio, posters (a photo needs macOS 14+), sesh-edit
   `--review` and normal edits (MPS), the lanczos upscale.
 - **GPU box** (the Windows 10 PC in the studio, RTX 3070): the x4plus upscale
-  (hours, Real-ESRGAN via Vulkan), long encodes and full ident renders.
+  (hours, Real-ESRGAN via Vulkan), batches of interviews (`sesh-batch`;
+  transcription runs on CUDA there), long encodes and full ident renders.
   Access is arranged by Dean. On it, PowerShell: chain commands with `;`,
-  never `&`. Transcription there is CPU-only, so slower than on a Mac. Long
-  jobs need a session that stays logged in. Paths and a full run:
+  never `&`. Remotion there needs the portable Node 22 first on PATH (the
+  system Node is v14): `$env:PATH = "C:\Users\<you>\tools\node-v22.23.5-win-x64;" + $env:PATH`.
+  Long jobs need a session that stays logged in. Paths and a full run:
   `longform/README.md`, "Machines".
 - If a user's laptop is struggling with an upscale or a long encode, offer
   the GPU box. Don't start an x4plus upscale on a laptop.
@@ -363,6 +367,9 @@ The full reference is `longform/README.md`. What matters most when driving it:
   `bun run render:intro` from the repo root (builds the Fuse intro). ffmpeg on PATH.
   The `claude` CLI must be logged in: the LLM steps call `claude -p`
   headless, no API key. First run downloads ~3.5 GB of models.
+- **Batches:** `sesh-batch <manifest>` drives the steps below per job and
+  resumes on a re-run. Manifests and their `.status.json` never go in git:
+  they hold share links. See the routing table row.
 - **Always `--review` first** for a new file, and show the user the review
   list (restarts, bad takes, chatter, out-of-order intros). Those are never
   auto-cut; act on the user's answer with `--cut`, `--move-to-front`, etc.
