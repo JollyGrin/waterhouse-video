@@ -62,7 +62,9 @@ describe("no private batch material in git", () => {
   it("tells a real share link from a placeholder", () => {
     expect(SHARE_LINK.test("https://www.dropbox.com/scl/fi/<id>/<name>.mp4?rlkey=<key>&dl=1")).toBe(false);
     expect(SHARE_LINK.test("https://www.dropbox.com/scl/fi/abc/x.mp4?rlkey=fakekey&dl=0")).toBe(false);
-    expect(SHARE_LINK.test("https://www.dropbox.com/scl/fi/a1b2/x.mp4?rlkey=k3j4h5g6f7d8s9a0q1w2e3r4t&dl=0")).toBe(true);
+    // built at runtime, so this file doesn't trip the tracked-files check below
+    const fake = "https://www.dropbox.com/scl/fi/a1b2/x.mp4?rlkey=" + "k3j4h5g6f7d8s9a0q1w2e3r4t".repeat(1) + "&dl=0";
+    expect(SHARE_LINK.test(fake)).toBe(true);
   });
 
   it("finds none tracked in this repo", () => {
