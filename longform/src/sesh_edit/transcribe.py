@@ -38,7 +38,13 @@ def split_chunks(audio: np.ndarray, max_s: float = 28.0, min_s: float = 8.0) -> 
         if n - s <= max_s * 100:
             chunks.append((s * hop, len(audio)))
             break
-        lo, hi = s + int(min_s * 100), s + int(max_s * 100)
+        # Clamp the search window: when robust() halves a short chunk, min_s can go
+        # negative, which made rms[lo:hi] an empty slice and crashed argmin. Keep
+        # every piece at least 1 s long.
+        lo, hi = s + int(max(min_s, 1.0) * 100), min(n, s + int(max_s * 100))
+        if hi <= lo:
+            chunks.append((s * hop, len(audio)))
+            break
         cut = lo + int(np.argmin(rms[lo:hi]))
         chunks.append((s * hop, cut * hop))
         s = cut
