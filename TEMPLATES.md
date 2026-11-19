@@ -87,3 +87,4 @@ New templates go here: name, what it is, how to ask for it, who made it.
 
 | Name | What it is | Say | Made by |
 |---|---|---|---|
+| **Fuse-Drums** | the Fuse intro's picture on a drum track instead of its own sound, the track's big hit on the logo lock. The track is not in the repo: ask Denzo for the song, then `uv run src/ident/fusedrums/gen-audio.py <song.wav>` | "render the Fuse-Drums intro" | Denzo |

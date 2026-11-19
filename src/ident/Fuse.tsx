@@ -787,9 +787,18 @@ const MaskFrame: React.FC<{ mask: string; weave: [number, number]; steady: boole
   );
 };
 
-const FuseView: React.FC<{ L: Layout }> = ({ L }) => {
+/** Fuse's own soundtrack (Splice's "turn" cut). Variants swap it, see FUSE_DRUMS_AUDIO. */
+const FUSE_AUDIO = "ident/audio/turn/mix.wav";
+/**
+ * Fuse-Drums: the same picture on a 5 s cut of a drum track, its big hit on the f55 lock. The track is
+ * not ours to publish, so the file is gitignored (public/audio/); make it with
+ * `uv run src/ident/fusedrums/gen-audio.py <song.wav>`.
+ */
+export const FUSE_DRUMS_AUDIO = "audio/fuse-drums/mix.wav";
+
+const FuseView: React.FC<{ L: Layout; src?: string; volume?: number }> = ({ L, src = FUSE_AUDIO, volume = 0.9 }) => {
   const f = useCurrentFrame();
-  const audio = <Audio src={staticFile("ident/audio/turn/mix.wav")} volume={0.9} />;
+  const audio = <Audio src={staticFile(src)} volume={volume} />;
   if (f >= T.clear) return <AbsoluteFill>{audio}</AbsoluteFill>;
 
   const cam = camera(f, L);
@@ -848,3 +857,6 @@ const FuseView: React.FC<{ L: Layout }> = ({ L }) => {
 export const Fuse: React.FC = () => <FuseView L={PORTRAIT} />;
 /** 1920×1080 (stream / YouTube). Same timeline and soundtrack. */
 export const FuseWide: React.FC = () => <FuseView L={LANDSCAPE} />;
+/** Fuse-Drums, 1080×1920 and 1920×1080: Fuse's picture on the drum track. */
+export const FuseDrums: React.FC = () => <FuseView L={PORTRAIT} src={FUSE_DRUMS_AUDIO} volume={1} />;
+export const FuseDrumsWide: React.FC = () => <FuseView L={LANDSCAPE} src={FUSE_DRUMS_AUDIO} volume={1} />;

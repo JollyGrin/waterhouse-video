@@ -529,6 +529,7 @@ normally.
 | FortRiddim | `fort-riddim/c1m.mp4`, `c1fx.mp4`, `c2fx.mp4`, `c3m.mp4`, `c3fx.mp4`, `soundtrack.wav`, `logo-white.png`, `poster/{boogie,disc,top,lineup,info}.png` | clips and soundtrack: `bun scripts/fort-riddim/make.ts --c1 IMG_2250.MOV --c2 IMG_2253.MOV --c3 IMG_2246.MOV` (or `FORT_RIDDIM_C1/_C2/_C3`) from Manuel's phone footage; logo and poster cut-outs: copied in by hand from the FORT RIDDIM poster artwork |
 | FortRiddimPromo | `fort-riddim/promo.mp4` | `bun run promo --source FORTRIDDIMPROMO.MP4` (or `FORT_RIDDIM_PROMO_SRC`), Manuel's disc animation |
 | FortRiddimShowcase | `fort-riddim/promo.mp4` | as FortRiddimPromo; `bun run showcase --source FORTRIDDIMPROMO.MP4` |
+| IdentFuse-Drums (all four cuts) | `audio/fuse-drums/mix.wav` | `uv run src/ident/fusedrums/gen-audio.py <song.wav>` cuts it from the drum track (62.4–67.4 s by default, `--start` to move it); get the song from Denzo privately, never through git |
 
 Ask whoever made the cut for the files, or regenerate them from the sources
 with the commands above.

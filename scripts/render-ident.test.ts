@@ -9,6 +9,7 @@ describe("ident catalogue", () => {
     expect(IDENT_IDEAS[0].idea).toBe("Fuse");
     expect(SESSIONS_INTRO.map((i) => i.idea)).toEqual([
       "Fuse",
+      "Fuse-Drums",
       "FuseLines-Ink",
       "FuseLines-Wave",
       "FuseLines-Draft",
@@ -32,8 +33,9 @@ describe("parseArgs (ident)", () => {
 
   it("expands --intro to both cuts of every Sessions-intro ident", () => {
     const { ids } = parseArgs(["--intro"]);
-    expect(ids).toHaveLength(8);
+    expect(ids).toHaveLength(10);
     expect(ids[0]).toBe("IdentFuse");
+    expect(ids).toContain("IdentFuse-Drums-16x9");
     expect(ids).toContain("IdentFuseLines-Draft-16x9");
   });
 
