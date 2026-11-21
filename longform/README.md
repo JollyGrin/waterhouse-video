@@ -113,12 +113,13 @@ never gets the intro: it stays the upscale input, and `sesh-overlay` adds the in
   or `--intro` is given. Decisions from before the intro existed get the default Fuse.
 
 Asset: `src/sesh_edit/assets/intro/fuse-16x9.{webm,flac,json}` is built, not committed:
-`bun run render:intro` at the repo root renders the Remotion comp `IdentFuse-16x9`
-(`src/ident/Fuse.tsx`) to ProRes 4444, then
-`ffmpeg -i IdentFuse-16x9.mov -an -c:v libvpx-vp9 -pix_fmt yuva420p -crf 30 -b:v 0 -auto-alt-ref 0 fuse-16x9.webm`
+`bun run render:intro` at the repo root renders the Remotion comp `IdentFuse-Drums-16x9`
+(`src/ident/Fuse.tsx`: Fuse's picture on the drum track from `src/ident/fusedrums/gen-audio.py`)
+to ProRes 4444, then
+`ffmpeg -i IdentFuse-Drums-16x9.mov -an -c:v libvpx-vp9 -pix_fmt yuva420p -crf 30 -b:v 0 -auto-alt-ref 0 fuse-16x9.webm`
 (no colour flags: the master's tags pass through untouched),
-`ffmpeg -i IdentFuse-16x9.mov -vn -c:a flac fuse-16x9.flac`, and writes `fuse-16x9.json` with
-`open_s` = frame 118 / 30. To change the intro, edit the Fuse comp and re-run `render:intro`.
+`ffmpeg -i IdentFuse-Drums-16x9.mov -vn -c:a flac fuse-16x9.flac`, and writes `fuse-16x9.json` with
+`open_s` = frame 118 / 30. To change the intro, edit the Fuse comp or the drum generator and re-run `render:intro`.
 The wheel bundles the files through hatch `artifacts` (pyproject.toml). ffmpeg only decodes
 VP9 alpha with `-c:v libvpx-vp9` before `-i` (the code does this).
 

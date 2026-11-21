@@ -47,7 +47,8 @@ stinger".
 ## Idents and the Sessions intro
 
 Short logo animations. **Fuse is the Sessions intro**: sesh-edit puts it at
-the start of every edited interview. Say "render the <name> ident"; most
+the start of every edited interview, in its **Fuse-Drums** cut (the same
+picture on our own drum track). Say "render the <name> ident"; most
 work in both 9:16 and 16:9.
 
 | Name | What it is | Format |
@@ -87,4 +88,4 @@ New templates go here: name, what it is, how to ask for it, who made it.
 
 | Name | What it is | Say | Made by |
 |---|---|---|---|
-| **Fuse-Drums** | the Fuse intro's picture on a drum track instead of its own sound, the track's big hit on the logo lock. The track is not in the repo: ask Denzo for the song, then `uv run src/ident/fusedrums/gen-audio.py <song.wav>` | "render the Fuse-Drums intro" | Denzo |
+| **Fuse-Drums** | the Fuse intro's picture on our own synthesised drum track (120 bpm, dry and gritty), its big hit on the logo lock. The intro sesh-edit puts on edited interviews. The track is in the repo; to change it, edit and re-run `uv run src/ident/fusedrums/gen-audio.py` | "render the Fuse-Drums intro" | Denzo (picture), drum track #51 |

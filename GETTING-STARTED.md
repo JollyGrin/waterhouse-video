@@ -77,7 +77,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # close and reopen Terminal so `uv` is found, then:
 cd ~/git/waterhouse-video/longform
 uv sync
-cd .. && bun run render:intro   # builds the Fuse intro sesh-edit puts on every edit (~30 s)
+cd .. && bun run render:intro   # builds the Fuse-Drums intro sesh-edit puts on every edit (~30 s)
 ```
 
 - The first real edit downloads about **3.5 GB** of speech models
