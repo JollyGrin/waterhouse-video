@@ -1,0 +1,128 @@
+{
+ "_note": "Made-up timings (#55). Both TimeMap ports must place these words here: scripts/reel/sesh.test.ts and longform/tests/test_reel_timemap.py.",
+ "keep_segments": [
+  [
+   50.0,
+   52.5
+  ],
+  [
+   1.0,
+   3.0
+  ],
+  [
+   4.0,
+   6.0
+  ],
+  [
+   10.0,
+   12.0
+  ]
+ ],
+ "inserts": [
+  {
+   "kind": "card",
+   "before": 1,
+   "dur_s": 3.5
+  },
+  {
+   "kind": "clip",
+   "before": 1,
+   "dur_s": 2.0
+  }
+ ],
+ "caption_words": [
+  {
+   "word": "Made",
+   "start": 50.2,
+   "end": 50.5
+  },
+  {
+   "word": "up",
+   "start": 50.6,
+   "end": 50.8
+  },
+  {
+   "word": "words.",
+   "start": 50.9,
+   "end": 52.6
+  },
+  {
+   "word": "So",
+   "start": 0.985,
+   "end": 1.2
+  },
+  {
+   "word": "[UH]",
+   "start": 1.3,
+   "end": 1.6
+  },
+  {
+   "word": "this",
+   "start": 1.7,
+   "end": 1.9
+  },
+  {
+   "word": "gone",
+   "start": 3.4,
+   "end": 3.6
+  },
+  {
+   "word": "is",
+   "start": 4.0,
+   "end": 4.01
+  },
+  {
+   "word": "a",
+   "start": 5.0,
+   "end": 5.2
+  },
+  {
+   "word": "test",
+   "start": 10.5,
+   "end": 10.9
+  }
+ ],
+ "total": 14.0,
+ "expected": [
+  {
+   "w": "Made",
+   "t": 0.2,
+   "end": 0.5
+  },
+  {
+   "w": "up",
+   "t": 0.6,
+   "end": 0.8
+  },
+  {
+   "w": "words.",
+   "t": 0.9,
+   "end": 2.5
+  },
+  {
+   "w": "So",
+   "t": 8.0,
+   "end": 8.2
+  },
+  {
+   "w": "this",
+   "t": 8.7,
+   "end": 8.9
+  },
+  {
+   "w": "is",
+   "t": 10.0,
+   "end": 10.05
+  },
+  {
+   "w": "a",
+   "t": 11.0,
+   "end": 11.2
+  },
+  {
+   "w": "test",
+   "t": 12.5,
+   "end": 12.9
+  }
+ ]
+}

@@ -54,15 +54,14 @@ import weeklyFallbackFixture from "./audience/fixtures/weekly-fallback.json";
 import type { ArtistRecapProps } from "./audience/schema";
 import { staticFile } from "remotion";
 import { LogoReveal } from "./session/LogoReveal";
-import type { CaptionWord } from "./session/Captions";
 import { FPS, WIDTH, HEIGHT, OPEN, CLOSE } from "./session/theme";
 import {
   SessionReel,
-  getReelDuration,
-  type ReelSegment,
+  reelTiming,
+  type SessionReelProps,
 } from "./reel/SessionReel";
 import { FPS as REEL_FPS, WIDTH as REEL_WIDTH, HEIGHT as REEL_HEIGHT } from "./reel/theme";
-import reelData from "./reel/data/current.json";
+import reelExample from "./reel/data/example.props.json";
 import { FortRiddim, FORT_RIDDIM_MEDIA } from "./fort-riddim/FortRiddim";
 import { FortRiddimPromo } from "./fort-riddim/FortRiddimPromo";
 import * as PROMO from "./fort-riddim/promo";
@@ -91,6 +90,15 @@ const FortRiddimPromoChecked = withMediaCheck(FortRiddimPromo);
 const FortRiddimShowcaseChecked = withMediaCheck(FortRiddimShowcase);
 const checkSrc = checkMedia<React.ComponentProps<typeof LogoReveal>>((p) => [p.src]);
 const checkPromo = checkMedia(() => [staticFile("fort-riddim/promo.mp4")]);
+
+// SessionReel's props come from make-reel (--props), so its length does too (#55).
+// Its defaults are a made-up example; a real reel's props stay in work/, outside git.
+const reelDefaults = reelExample as SessionReelProps;
+const checkReelMedia = checkMedia<SessionReelProps>((p) => [staticFile(p.cutFile)]);
+const calculateReelMetadata: CalculateMetadataFunction<SessionReelProps> = async (args) => {
+  const checked = await checkReelMedia(args);
+  return { ...checked, durationInFrames: reelTiming(args.props).total };
+};
 
 const calculateWeeklyMetadata: CalculateMetadataFunction<WeeklyLineupProps> = ({
   props,
@@ -294,20 +302,12 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="SessionReel"
         component={SessionReelChecked}
-        calculateMetadata={checkMedia<React.ComponentProps<typeof SessionReel>>((p) => [p.cutSrc])}
-        durationInFrames={getReelDuration(reelData.pictureFrames)}
+        calculateMetadata={calculateReelMetadata}
+        durationInFrames={reelTiming(reelDefaults).total}
         fps={REEL_FPS}
         width={REEL_WIDTH}
         height={REEL_HEIGHT}
-        defaultProps={{
-          cutSrc: staticFile(reelData.cutFile),
-          segments: reelData.segments as ReelSegment[],
-          captions: reelData.captions as CaptionWord[],
-          pictureFrames: reelData.pictureFrames,
-          artist: reelData.artist,
-          episodeLabel: reelData.episodeLabel,
-          cta: reelData.cta,
-        }}
+        defaultProps={reelDefaults}
       />
       <Composition
         id="SessionOpen"

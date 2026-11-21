@@ -1,0 +1,27 @@
+{
+  "cutFile": "reel/example-cut.mp4",
+  "source": { "width": 1920, "height": 1080 },
+  "segments": [
+    { "fromFrame": 0, "durationInFrames": 90, "crop": { "x": 656, "y": 0, "width": 608, "height": 1080 } },
+    { "fromFrame": 90, "durationInFrames": 90, "crop": { "x": 300, "y": 60, "width": 540, "height": 960 } }
+  ],
+  "captions": [
+    { "t": 0.2, "d": 0.3, "w": "This", "br": true },
+    { "t": 0.5, "d": 0.2, "w": "is", "br": false },
+    { "t": 0.7, "d": 0.2, "w": "a", "br": false },
+    { "t": 0.9, "d": 0.5, "w": "made-up", "br": false },
+    { "t": 1.4, "d": 0.6, "w": "example.", "br": false },
+    { "t": 3.1, "d": 0.4, "w": "Real", "br": true },
+    { "t": 3.5, "d": 0.4, "w": "words", "br": false },
+    { "t": 3.9, "d": 0.3, "w": "stay", "br": false },
+    { "t": 4.2, "d": 0.5, "w": "outside", "br": false },
+    { "t": 4.7, "d": 0.6, "w": "git.", "br": false }
+  ],
+  "pictureFrames": 180,
+  "intro": "fuse-drums",
+  "introGainDb": 0,
+  "outro": "card",
+  "artist": "GUEST",
+  "episodeLabel": "WATERHOUSE SESSIONS",
+  "cta": "FULL INTERVIEW ON YOUTUBE"
+}

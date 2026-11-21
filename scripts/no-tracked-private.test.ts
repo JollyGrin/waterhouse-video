@@ -90,3 +90,21 @@ describe("no private batch material in git", () => {
     expect(grep.stdout.split("\n").filter(Boolean)).toEqual([]);
   });
 });
+
+// A reel definition for a real interview quotes its transcript (#55): it lives next to
+// the episode's outputs, never in git. Only the made-up example and the two reels from
+// the retired episode cut (committed before #55) are tracked.
+const TRACKED_REELS = new Set([
+  "src/reel/data/example.reel.json",
+  "src/reel/data/fro-ministry.reel.json",
+  "src/reel/data/boogie-exit.reel.json",
+]);
+
+describe("no real reel definitions in git", () => {
+  it("tracks only the example reel definition (and the two old ones)", () => {
+    const ls = git(["ls-files", "-z", "--full-name", "--", ":/*.reel.json", ":/**/*.reel.json"]);
+    if (ls.status !== 0) return;
+    // If this fails: `git rm --cached <file>` and keep it next to the episode (sesh-out/reel/).
+    expect(ls.stdout.split("\0").filter((f) => f && !TRACKED_REELS.has(f))).toEqual([]);
+  });
+});

@@ -1,0 +1,24 @@
+{
+  "_readme": "The shape of a reel made from a sesh-edit episode (#55). Copy it next to the episode's outputs (never into the repo: a real one quotes the interview), fill in the paths and spans, then: bun run reel <that file>. Spans are clean-cut seconds; find them with bun scripts/reel/find-words.ts <decisions> \"quoted words\". Crops: bun scripts/reel/stills.ts <that file>.",
+  "slug": "guest-best-30",
+  "title": "Guest - the best 30 seconds",
+  "episode": {
+    "clean": "<name>.clean.mp4",
+    "decisions": "<name>.decisions.json"
+  },
+  "artist": "GUEST",
+  "episodeLabel": "WATERHOUSE SESSIONS",
+  "cta": "FULL INTERVIEW ON YOUTUBE",
+  "intro": "fuse-drums",
+  "outro": "card",
+  "shots": {
+    "guest": { "x": 300, "y": 60, "width": 540, "height": 960 },
+    "host": { "x": 1080, "y": 60, "width": 540, "height": 960 }
+  },
+  "segments": [
+    { "start": 312.4, "end": 318.9, "shot": "host", "note": "made-up: the question" },
+    { "start": 319.6, "end": 341.2, "shot": "guest", "note": "made-up: the answer" },
+    { "start": 341.2, "end": 344.0, "note": "no shot: centre crop" }
+  ],
+  "wordFixes": [{ "t": 330.12, "w": "Waterhouse" }]
+}
