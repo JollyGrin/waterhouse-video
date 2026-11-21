@@ -173,7 +173,7 @@ the gain sesh-edit used; with no intro the audio is copied), and writes a matchi
 
 "Make a reel from the best 30 seconds of the <guest> interview": a 20–30 s Instagram reel
 (1080×1920, 30 fps) with the Fuse-Drums intro in front, the clip cropped to 9:16 with big
-captions, and the end card. It is built in Remotion from the repo root (`SessionReel`,
+captions, and the YouTube end bumper ("Full interview on YouTube", @Waterhouse_Studios, "WITH <guest>"; `"outro": "card"` brings back the old end card). It is built in Remotion from the repo root (`SessionReel`,
 `scripts/reel/make-reel.ts`, #55); sesh-edit only supplies the episode.
 
 **What it needs:** the clean cut (`<name>.clean.mp4`, or its upscale
@@ -215,7 +215,8 @@ checks that the clean cut's length matches the decisions.
    render and prints a props file for Studio (`bun run dev -- --props=<file>`).
 
 **Sound:** the intro is gained to the clip's loudness, capped so its own true peak stays under
-−1 dBTP (as `intro.mix_audio` does for the 16:9 edit). Then the whole reel gets one gain to
+−1 dBTP (as `intro.mix_audio` does for the 16:9 edit). The YouTube bumper's tail is pre-gained by
+the opposite of the master's gain, so it ends up at its designed level. Then the whole reel gets one gain to
 −14 LUFS and a 192 kHz true-peak limiter; the encoded file is measured and must land at
 −14 ± 0.5 LUFS and ≤ −1 dBTP. Remotion's file is 42.7 ms late on sound (AAC priming); that is
 trimmed before mastering (checked by cross-correlation: within 2 ms after).

@@ -38,6 +38,7 @@ import { CENTRE, centreCrop, cropProblems, type Crop, type SourceSize } from "..
 import { FPS } from "../../src/reel/theme";
 import { reelTiming, type ReelIntro, type ReelOutro, type SessionReelProps } from "../../src/reel/SessionReel";
 import { FUSE_DRUMS_AUDIO } from "../../src/ident/Fuse";
+// (the YouTube bumper's sound is placed by SessionReel; only its gain is worked out here)
 import { seshCaptionWords, TimeMap, type CaptionWord, type SeshDecisions } from "./sesh";
 
 export type Segment = { start: number; end: number; shot?: string; note?: string };
@@ -71,7 +72,7 @@ export type ReelDef = {
   cta: string;
   /** Default "fuse-drums". */
   intro?: ReelIntro;
-  /** Default "card". */
+  /** Default "youtube" (the YouTube end bumper); "card" is the old end card. */
   outro?: ReelOutro;
   /** Named crop windows into the source, in source pixels. "centre" is always there. */
   shots?: Record<string, Crop>;
@@ -141,6 +142,17 @@ export function introGainDb(clipLufs: number, intro: { i: number; tp: number }):
   return +Math.min(clipLufs - intro.i, TARGET_TP - intro.tp).toFixed(2);
 }
 
+/**
+ * The YouTube bumper's gain. Its tail was made to a fixed level (hit at −1.5 dBTP),
+ * and it is mostly decay, so matching its integrated loudness to the speech (the
+ * intro's rule) would be wrong. Instead it is pre-gained by the opposite of what the
+ * master will do to the clip (TARGET_LUFS − clip), so it comes out at its designed
+ * level in the finished reel and the limiter leaves it alone.
+ */
+export function outroGainDb(clipLufs: number): number {
+  return +(clipLufs - TARGET_LUFS).toFixed(2);
+}
+
 const run = (cmd: string, args: string[]) =>
   new Promise<string>((resolvePromise, reject) => {
     const proc = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -202,7 +214,7 @@ async function main() {
   const defPath = resolve(args.def!);
   const def: ReelDef = await Bun.file(defPath).json();
   const intro: ReelIntro = def.intro ?? "fuse-drums";
-  const outro: ReelOutro = def.outro ?? "card";
+  const outro: ReelOutro = def.outro ?? "youtube";
 
   /* ---------- the source, and its words in source time ---------- */
 
@@ -315,8 +327,10 @@ async function main() {
 
   // Match the intro to the clip, as sesh-edit does on the 16:9 edit.
   let gain = 0;
+  const clip = await measureLoudness(cutPath);
+  const outroGain = outro === "youtube" ? outroGainDb(clip.i) : 0;
+  if (outro === "youtube") console.log(`Outro: gain ${outroGain >= 0 ? "+" : ""}${outroGain.toFixed(2)} dB (lands at its own level after mastering)`);
   if (intro === "fuse-drums") {
-    const clip = await measureLoudness(cutPath);
     const introLoud = await measureLoudness(join("public", FUSE_DRUMS_AUDIO));
     gain = introGainDb(clip.i, introLoud);
     console.log(
@@ -334,6 +348,7 @@ async function main() {
     intro,
     introGainDb: gain,
     outro,
+    outroGainDb: outroGain,
     artist: def.artist,
     episodeLabel: def.episodeLabel,
     cta: def.cta,

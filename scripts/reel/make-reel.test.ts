@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { introGainDb, rebaseCaptions, resolveCrops, snap } from "./make-reel";
+import { introGainDb, outroGainDb, rebaseCaptions, resolveCrops, snap } from "./make-reel";
 import { centreCrop, cropProblems } from "../../src/reel/crop";
 import { reelTiming, INTRO_OPEN_FRAME } from "../../src/reel/SessionReel";
+import { YOUTUBE_OUTRO_FRAMES } from "../../src/reel/outro/YouTubeOutro";
 import example from "../../src/reel/data/example.reel.json";
 
 const src = { width: 1920, height: 1080 };
@@ -60,6 +61,14 @@ describe("make-reel (#55)", () => {
     expect(t.clipFrom / 30).toBeCloseTo(3.933, 3);
     expect(t.total).toBe(118 + 750 + 48);
     expect(reelTiming({ intro: "none", outro: "none", pictureFrames: 750 }).total).toBe(750);
+    const yt = reelTiming({ intro: "fuse-drums", outro: "youtube", pictureFrames: 750 });
+    expect(yt.outroFrom).toBe(868);
+    expect(yt.total).toBe(868 + YOUTUBE_OUTRO_FRAMES);
+  });
+
+  it("pre-gains the YouTube bumper against the master's gain", () => {
+    expect(outroGainDb(-20.7)).toBeCloseTo(-6.7, 6); // quiet clip: master lifts +6.7, bumper pre-cut by as much
+    expect(outroGainDb(-12.7)).toBeCloseTo(1.3, 6);
   });
 
   it("snaps to the 30 fps grid", () => {

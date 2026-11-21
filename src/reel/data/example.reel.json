@@ -10,7 +10,7 @@
   "episodeLabel": "WATERHOUSE SESSIONS",
   "cta": "FULL INTERVIEW ON YOUTUBE",
   "intro": "fuse-drums",
-  "outro": "card",
+  "outro": "youtube",
   "shots": {
     "guest": { "x": 300, "y": 60, "width": 540, "height": 960 },
     "host": { "x": 1080, "y": 60, "width": 540, "height": 960 }

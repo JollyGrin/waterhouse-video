@@ -27,7 +27,8 @@ Filled in automatically from the studio calendar and the portal.
 | **ArtistRecap** | "who showed up": an artist's last shows, who came, who stayed, who was new | 9:16 | "make a recap for <artist>" |
 | **SessionPoster** | square session cover with the guest's photo cut out (photo needs macOS 14+) | square | "make a poster for <guest>'s session on <date>, photo is <file>" |
 | **SessionPosterType** | the same cover without a photo, type only | square | "make a type-only poster for <guest>" |
-| **SessionReel** | Instagram reel from a sesh-edit interview: the Fuse-Drums intro, 20–30 s of the interview cropped to 9:16 (cutting between speakers), big captions, end card | 9:16 | "make a reel from the best 30 seconds of the <guest> interview" |
+| **SessionReel** | Instagram reel from a sesh-edit interview: the Fuse-Drums intro, 20–30 s of the interview cropped to 9:16 (cutting between speakers), big captions, the YouTube end bumper | 9:16 | "make a reel from the best 30 seconds of the <guest> interview" |
+| **ReelOutro-YouTube** | the reel's end bumper (3.8 s): Fuse's scope switched off, with "Full interview on YouTube" and the channel handle in between; its own sound, ends on black so the reel loops cleanly | 9:16 | "put the YouTube outro on the end of the reel" / "render the YouTube outro with <guest>" |
 | **SessionOpen** / **SessionClose** | first / last 5 seconds of an episode inside the Waterhouse mark | 16:9 | "make the logo reveal for the <guest> episode" |
 | **FortRiddim** | FORT RIDDIM promo, showcase and reel (one-off, by Manuel) | 9:16 | "render the Fort Riddim promo" |
 

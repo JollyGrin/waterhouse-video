@@ -11,6 +11,7 @@ import {
 import type { CaptionWord } from "../session/Captions";
 import { WhMark, MARK_ASPECT } from "../session/WhMark";
 import { FUSE_FRAMES, FuseDrums } from "../ident/Fuse";
+import { YouTubeOutro, YOUTUBE_OUTRO_DEFAULTS, YOUTUBE_OUTRO_FRAMES } from "./outro/YouTubeOutro";
 import { ReelCaptions } from "./ReelCaptions";
 import type { Crop, SourceSize } from "./crop";
 import { BUG, END_CARD_SECONDS, FPS, HEIGHT, PUSH, WIDTH } from "./theme";
@@ -26,10 +27,11 @@ export type ReelSegment = {
 /** "fuse-drums": Fuse-Drums 9:16 in front, the clip opening under its tail. */
 export type ReelIntro = "fuse-drums" | "none";
 /**
- * "card": the end card (mark, artist, CTA). The YouTube end bumper (#54) replaces it
- * once it lands.
+ * "youtube": the YouTube end bumper (ReelOutro-YouTube, #54: "Full interview on
+ * YouTube", @Waterhouse_Studios, "WITH <ARTIST>"). "card": the old end card (mark,
+ * artist, CTA), kept as a fallback.
  */
-export type ReelOutro = "card" | "none";
+export type ReelOutro = "youtube" | "card" | "none";
 
 export type SessionReelProps = {
   /** The concatenated cut, relative to public/ (reel/<slug>-cut.mp4): still 16:9, still the full two-shot. */
@@ -45,6 +47,9 @@ export type SessionReelProps = {
   /** Gain on the intro's soundtrack so it sits at the clip's loudness (make-reel measures it). */
   introGainDb: number;
   outro: ReelOutro;
+  /** Gain on the YouTube bumper's sound (make-reel sets it; see outroGainDb there). */
+  outroGainDb?: number;
+  /** The guest, in capitals: the bumper's "WITH" line and the old card's name. */
   artist: string;
   episodeLabel: string;
   cta: string;
@@ -63,7 +68,7 @@ export const reelTiming = (p: Pick<SessionReelProps, "intro" | "outro" | "pictur
   const clipFrom = p.intro === "fuse-drums" ? INTRO_OPEN_FRAME : 0;
   const introEnd = p.intro === "fuse-drums" ? FUSE_FRAMES : 0;
   const outroFrom = clipFrom + p.pictureFrames;
-  const outroFrames = p.outro === "card" ? END_CARD_FRAMES : 0;
+  const outroFrames = p.outro === "youtube" ? YOUTUBE_OUTRO_FRAMES : p.outro === "card" ? END_CARD_FRAMES : 0;
   return { clipFrom, introEnd, outroFrom, total: Math.max(introEnd, outroFrom + outroFrames) };
 };
 
@@ -237,6 +242,17 @@ export const SessionReel: React.FC<SessionReelProps> = (props) => {
       {props.intro === "fuse-drums" ? (
         <Sequence durationInFrames={FUSE_FRAMES} name="Fuse-Drums">
           <FuseDrums volume={10 ** (props.introGainDb / 20)} />
+        </Sequence>
+      ) : null}
+
+      {props.outro === "youtube" ? (
+        <Sequence from={outroFrom} durationInFrames={YOUTUBE_OUTRO_FRAMES} name="YouTube outro">
+          <YouTubeOutro
+            handle={YOUTUBE_OUTRO_DEFAULTS.handle}
+            line={YOUTUBE_OUTRO_DEFAULTS.line}
+            artist={props.artist.toUpperCase()}
+            volume={10 ** ((props.outroGainDb ?? 0) / 20)}
+          />
         </Sequence>
       ) : null}
 
