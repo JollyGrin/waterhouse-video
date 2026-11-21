@@ -2,7 +2,8 @@
 # requires-python = ">=3.10"
 # dependencies = ["numpy"]
 # ///
-# FUSE-DRUMS: Fuse's picture on a 5 s cut of a track by Denzo's brother, used with permission.
+# FUSE-DRUMS: Fuse's picture on a 5 s cut of a drum track.
+# Source: "hu", made for Waterhouse by Denzo's brother, used with permission.
 #
 # The committed public/ident/audio/fusedrums/mix.wav is the source of truth: the full song is not in the
 # repo, so this script is only needed to re-cut it from the song (Denzo has it). It is how that file was made:

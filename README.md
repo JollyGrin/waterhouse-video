@@ -396,7 +396,7 @@ redrawn beam. The other 24 are the prototype's other ideas, kept as stock.
 | Idea | Comp ids | What it is |
 | --- | --- | --- |
 | Fuse | `IdentFuse`, `IdentFuse-16x9` | **the Sessions intro** (5 s) |
-| Fuse-Drums | `IdentFuse-Drums`, `IdentFuse-Drums-16x9` | Fuse's picture on a 5 s cut of a track by Denzo's brother (used with permission), the big hit on the lock (f55): **the cut sesh-edit puts on edits** (`public/ident/audio/fusedrums/mix.wav`, committed; `fusedrums/gen-audio.py` re-cuts it from the song) |
+| Fuse-Drums | `IdentFuse-Drums`, `IdentFuse-Drums-16x9` | Fuse's picture on a 5 s cut of "hu" (made for Waterhouse by Denzo's brother), the big hit on the lock (f55): **the cut sesh-edit puts on edits** (`public/ident/audio/fusedrums/mix.wav`, committed; `fusedrums/gen-audio.py` re-cuts it from the song) |
 | FuseLines-Ink | `IdentFuseLines-Ink`, `IdentFuseLines-Ink-16x9` | Fuse with the beam as an ink line after the Waterhouse Radio poster, Denzo 4 semitones lower |
 | FuseLines-Wave | `IdentFuseLines-Wave`, `IdentFuseLines-Wave-16x9` | the ink line with wave echoes, Denzo 7 semitones lower |
 | FuseLines-Draft | `IdentFuseLines-Draft`, `IdentFuseLines-Draft-16x9` | the ink line as a draughtsman's drawing, Denzo 12 semitones lower |
@@ -476,9 +476,6 @@ the system Python. The scratch voice is `src/ident/scratchkit/denzo-waterhouse.w
 Denzo saying "Waterhouse", cut from the published Sessions video (YouTube
 mWNWTIGghjc). Ident-owned media lives in `public/ident/`. `public/audio/` stays
 for the other videos' sounds.
-
-**Credit.** Fuse-Drums soundtrack: a 5 s cut of a track by Denzo's brother, used with permission.
-TODO(Dean): his artist name and link.
 
 ### Just the numbers
 
