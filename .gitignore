@@ -7,8 +7,13 @@ dist
 out
 build
 
-# Weekly music tracks (copyrighted) + local test audio — keep out of the public repo
-public/audio/
+# Template media is committed (#50): public/audio/<kit>/ and public/ident/ are
+# tracked, as long as each file is small and ours. What stays out is private
+# or large; scripts/private-media.ts lists it with where it comes from.
+# Copyrighted music (the weekly lineup beds) and local test audio:
+public/audio/private/
+# loose tracks the old pick-track left directly in public/audio/
+public/audio/*.mp3
 
 # Working files for the session video edit (large intermediates)
 work/

@@ -26,10 +26,12 @@ There are two tools in here, and Claude chooses between them for you:
 | **Edit a recorded video**: cut silences and "um"s, fix audio sync and the mics, add captions, make the 1080p version, put the intro on | **sesh-edit** | `longform/` |
 
 > **This repo is public.** Anyone on the internet can read it. Footage,
-> photos, music and finished videos are **never** committed. The folders they
-> go in are already set up so git ignores them (see
-> [Where your files go](#2-where-your-files-go)). If Claude ever asks to commit
-> a video, image or audio file, say no.
+> artists' photos, songs by other artists and finished videos are **never**
+> committed. The folders they go in are already set up so git ignores them
+> (see [Where your files go](#2-where-your-files-go)). The one kind of media
+> that *is* committed: the short sounds and pictures a template is made of,
+> when we made them ourselves. Claude takes care of that, so a template you
+> make renders for everyone.
 
 ---
 
@@ -120,18 +122,26 @@ yourself.
 | **Animations** (promo clips, boards, recaps, stingers, reels) | `out/` in the repo | Ignored by git. Each command prints the exact file name. |
 | **Posters** | `out/posters/` | |
 | **Artist photos** for posters | anywhere, e.g. `~/Downloads/` | Give Claude the path (you can drag the file into the Terminal window). It copies the photo into `public/artists/`, which git ignores. |
-| **Music** | ask Dean for the music library folder | The weekly music beds are copyrighted. They live in `public/audio/` locally and are never committed. |
+| **Music** | ask Dean for the music library folder | The weekly music beds are copyrighted. They live in `public/audio/private/` locally and are never committed. A song you only want to try in a template goes there too. |
 
 On the GPU box the folders are `C:\Users\<you>\Videos\sesh-in\` (in) and
 `C:\Users\<you>\Videos\sesh-out\` (out).
 
-**Never commit media.** Git ignores `out/`, `work/`, `public/session/`,
-`public/reel/`, `public/artists/`, `public/fort-riddim/` and most of
-`public/audio/`. The only media in the repo is the sound kits in
-`public/audio/{bumper,pullup,recap}/` (made by us or free-licensed). Renders
-never go in git, not even as examples: they can always be made again. If `git status` ever shows a `.mp4`, `.mov`,
-`.wav`, `.jpg` or `.png` you didn't expect, ask Claude to remove it from the
-commit.
+**What goes in git and what doesn't.** Git ignores `out/`, `work/`,
+`public/session/`, `public/reel/`, `public/artists/`, `public/fort-riddim/`
+and `public/audio/private/`. The only media in the repo is what templates are
+made of: the sound kits in `public/audio/` and the idents' sounds and
+pictures in `public/ident/`, all made by us or free-licensed, and small.
+When you make a template, Claude commits its sounds with it, so Dean and
+everyone else can render it straight after they get it. You never need to
+send anyone a file.
+
+Songs by other artists never go in a template, not even a few seconds: the
+repo is public, and a video on someone else's song gets copyright claims on
+YouTube. Ask Claude for an original sound instead (a drum hit, a hum, a
+riser). Renders never go in git either, not even as examples: they can
+always be made again. If `git status` ever shows a `.mp4`, `.mov`, `.wav`,
+`.jpg` or `.png` you didn't expect, ask Claude to remove it from the commit.
 
 ---
 

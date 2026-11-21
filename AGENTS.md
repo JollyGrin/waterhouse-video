@@ -65,13 +65,15 @@ even if the user asks you to skip them:
 4. **Remind the user to message Dean (JollyGrin) on WhatsApp** with the PR
    link when it's open. Don't add contact details anywhere in the repo. If
    they don't need it in `main` yet, they just keep working on their branch.
-5. **Never commit media or private material.** The repo is public, and you
-   push often, so check `git status` before every commit. Never commit:
-   footage, photos, music or renders (`.mp4 .mov .webm .mkv .wav .mp3 .flac
-   .aiff .jpg .jpeg .png`) beyond what is already tracked; transcripts,
-   captions (`.srt`), `.decisions.json` files or `*.work/` folders from
-   interviews; Dropbox links; tokens, `.env` files or anything that looks
-   like a password. Details under [Conventions](#conventions).
+5. **Commit what a template needs; never commit private material.** The
+   repo is public, and you push often, so check `git status` before every
+   commit. The sounds and pictures a template needs to render **are**
+   committed, as long as they're small and ours (see [Media a template
+   needs](#media-a-template-needs)). Never commit: footage, artists' photos,
+   music we don't own, or renders; transcripts, captions (`.srt`),
+   `.decisions.json` files or `*.work/` folders from interviews; Dropbox
+   links; tokens, `.env` files or anything that looks like a password.
+   Details under [Conventions](#conventions).
 6. **Bun at the root, uv in `longform/`.** Never npm/npx/yarn/pnpm, never
    pip.
 
@@ -178,16 +180,63 @@ reel look that others could reuse):
      `idea` list in `src/bumper/SessionBumper.tsx` and its `DURATIONS`
      (`bun run render:bumper --idea <name>`);
    - other compositions: `src/<Name>.tsx`, registered in `src/Root.tsx` with
-     the name as the composition id.
-3. **Add a row to `TEMPLATES.md`** in the same commit: name, kind, one line
+     the name as the composition id;
+   - its sounds and pictures: its own folder, `public/ident/audio/<name>/`
+     for an ident, `public/audio/<name>/` for anything else (lowercase
+     name). Reusing a file from the shared kits in
+     `public/audio/{bumper,pullup,recap}/` is fine.
+3. **Commit its media with it** (next section): check the size rule, shrink
+   what's too big, then stage the files by name next to the code.
+4. **Add a row to `TEMPLATES.md`** in the same commit: name, kind, one line
    on what it is, what to say to get it, who made it.
-4. **Save and back up** (hard rule 2), then tell the user: *"It's called
+5. **Save and back up** (hard rule 2), then tell the user: *"It's called
    **Name**. Anyone can now ask for 'the Name stinger'. Send it to Dean for
    review when you want everyone to have it."*
 
 Changing a template other people use changes it for everyone once it's
 merged. If the user wants a different take rather than a fix, make a
 `<Name>-<Word>` variant instead.
+
+### Media a template needs
+
+The goal: **a teammate makes a template, Dean pulls, it renders.** So the
+sounds and pictures a template plays are committed with it, the same way
+as its code. Never tell the user to "send the file to Dean" or share it on
+WhatsApp or Dropbox: they'd have to do that for every teammate, every time.
+When you make or change a template:
+
+- **Is it ours?** Only commit media we made (the `gen-audio.py`
+  generators, a sound recorded in the studio, Denzo's voice) or that has a
+  licence that lets us publish it (CC0, Pixabay, Kenney; note the source
+  and licence in a `CREDITS.md` in the folder, like
+  `public/audio/bumper/CREDITS.md`). **Songs by other artists are never
+  committed**, not even a few seconds of one: the repo is public, and a
+  YouTube intro on someone else's song gets copyright claims. If the user
+  wants a song in a template, say so in plain words and offer to make an
+  original sound instead (a drum hit, a hum, a riser).
+- **Is it small?** At most **4 MB per file** and **10 MB per folder**.
+  Cut audio to the seconds the template plays; use mono unless the stereo
+  is the point; size pictures to the frame (at most 1920 px on the long
+  side, JPEG for photos, PNG only for flat graphics or transparency). With
+  ffmpeg, e.g. `ffmpeg -i in.wav -ss 62.4 -t 5 -ac 1 -ar 48000 out.wav` or
+  `ffmpeg -i in.png -vf scale=1920:-1 out.jpg`.
+- **Check it:** `bun scripts/template-media.ts` lists every file under
+  `public/` a template uses and whether it is in git. `bun run test` fails
+  when a template uses a file that isn't committed and isn't on the private
+  list, or when a committed file is over the size rule.
+
+**When it can't be public** (footage, an artist's photo, someone else's
+song the user only wants to test with): don't commit it. Put it in a
+gitignored folder: `public/audio/private/` for music, the existing
+`public/session/`, `public/reel/`, `public/artists/` or
+`public/fort-riddim/` for the rest. Add the folder or file to
+`scripts/private-media.ts` with why it's private and **where it comes
+from** (the command that makes it, or who has it), and add a row to README
+"Media for local compositions". Tell the user in one sentence that this
+template won't render on other computers until they get that file, and
+suggest a version that doesn't need it. If the composition plays footage,
+give it the "Missing media" card (`src/MissingMedia.tsx`) like
+`SessionOpen`.
 
 ## House style
 
@@ -216,16 +265,19 @@ So everyone's work looks like it comes from the same place:
 - **Bun only at the root.** `bun install`, `bun run <script>`, `bunx remotion
   ...`. Never `npm`, `npx`, `yarn` or `pnpm`.
 - **uv only in `longform/`.** `uv sync`, `uv run sesh-edit ...`. Never `pip`.
-- **The repo is public. Never commit media**: footage, photos, music,
-  renders. Check `git status` before every commit and leave out any
-  `.mp4/.mov/.webm/.wav/.mp3/.flac/.aiff/.jpg/.png` that isn't already
-  tracked. The tracked exceptions are the sound kits in
-  `public/audio/{bumper,pullup,recap}/` and the idents' generated inputs in
-  `public/ident/` and `src/ident/` (WAVs from their `gen-audio.py`,
-  `denzo-waterhouse.wav`). Renders, frame strips and stills
-  never go in git (not even in `docs/`): they can be rebuilt, so give the
-  command instead. `bun run test` fails if one is tracked under `docs/`,
-  `out/` or `longform/docs/`.
+- **The repo is public. Commit template media, nothing else.** A
+  template's own sounds and pictures are committed (`public/audio/<kit>/`,
+  `public/ident/`, `src/ident/` generator inputs like
+  `denzo-waterhouse.wav`) if they're small and ours: [Media a template
+  needs](#media-a-template-needs). Footage, artists' photos, music we don't
+  own and renders never are. Check `git status` before every commit: a
+  `.mp4/.mov/.webm/.wav/.mp3/.flac/.aiff/.jpg/.png` outside a template's
+  folder is almost always a mistake. Renders, frame strips and stills never
+  go in git (not even in `docs/`): they can be rebuilt, so give the command
+  instead. `bun run test` fails if one is tracked under `docs/`, `out/` or
+  `longform/docs/`, if a template uses a file that isn't committed or on
+  the private list (`scripts/private-media.ts`), or if a committed file is
+  over the size rule.
 - **Branch, save and back up as you go, PR; never `main`.** See [Hard rules](#hard-rules-read-before-touching-anything).
   Stage files by name, never `git add -A`. Commit messages: a short line saying what changed, e.g. `neon stinger: shorter hold`.
 - Before a PR: `bun run lint` (eslint + tsc) and `bun run test` (it lists the root test files so `longform/` is never picked up); `bunx remotion
@@ -235,18 +287,21 @@ So everyone's work looks like it comes from the same place:
 
 ## Where media comes from and goes
 
-| Media | Comes from | Lives (gitignored) |
+| Media | Comes from | Lives |
 |---|---|---|
+| Template sounds and pictures (ours, small) | the template's generator, the studio, CC0 kits | **in git**: `public/audio/<kit>/`, `public/ident/` |
 | Raw interview recordings | Dropbox share links (`dl=0` → `dl=1`, keep `rlkey=`), the camera, OBS | `~/Movies/waterhouse/in/` on Macs, `C:\Users\<you>\Videos\sesh-in\` on the GPU box |
 | sesh-edit output | sesh-edit | `~/Movies/waterhouse/out/`, `C:\Users\<you>\Videos\sesh-out\` |
 | Artist photos, event data, audience numbers | the Waterhouse portal API (public), CDN URLs | fetched at render time; poster photos copied to `public/artists/` |
-| Weekly music beds (copyrighted) | the music library folder in `weekly/state.json` | `public/audio/` (except the tracked kits) |
-| Footage some compositions play | the person who made it | `public/session/`, `public/reel/`, `public/fort-riddim/`, `work/` |
-| Renders | Remotion | `out/` |
+| Weekly music beds, any song you only test with (copyrighted) | the music library folder in `weekly/state.json` | `public/audio/private/` (gitignored) |
+| Footage some compositions play | the person who made it | `public/session/`, `public/reel/`, `public/fort-riddim/`, `work/` (gitignored) |
+| Renders | Remotion | `out/` (gitignored) |
 
-A composition whose footage is missing shows a "Missing media" card naming
-the file (`src/MissingMedia.tsx`). README "Media for local compositions" lists
-what each one needs and where it comes from: tell the user, don't commit a
+Everything under `public/` that templates use but git doesn't have is listed
+in `scripts/private-media.ts`, with where it comes from. A composition whose
+footage is missing shows a "Missing media" card naming the file
+(`src/MissingMedia.tsx`). README "Media for local compositions" lists what
+each one needs and where it comes from: tell the user, don't commit a
 stand-in. Scheduled cover sync is an example launchd wrapper in
 `scripts/contrib/covers-cron.sh` (macOS); elsewhere schedule
 `bun scripts/sync-covers.ts` yourself.
@@ -285,6 +340,7 @@ src/fort-riddim/         FORT RIDDIM promo, showcase and reel (one-off, Manuel)
 src/audience/            metrics + schemas for recap and board (tests: bun run test)
 scripts/render-*.ts      one render script per video
 scripts/make-poster.ts, sync-covers.ts, cutout.swift   posters
+scripts/template-media.ts, private-media.ts            which public/ files templates use; the private list (#50)
 scripts/reel/make-reel.ts                              reel cut + render
 longform/                sesh-edit (Python, uv): the long-form editor; its README is the reference
 out/, work/              renders and intermediates (gitignored)
