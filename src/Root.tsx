@@ -62,6 +62,7 @@ import {
   type ReelSegment,
 } from "./reel/SessionReel";
 import { FPS as REEL_FPS, WIDTH as REEL_WIDTH, HEIGHT as REEL_HEIGHT } from "./reel/theme";
+import { YouTubeOutro, YOUTUBE_OUTRO_DEFAULTS, YOUTUBE_OUTRO_FRAMES } from "./reel/outro/YouTubeOutro";
 import reelData from "./reel/data/current.json";
 import { FortRiddim, FORT_RIDDIM_MEDIA } from "./fort-riddim/FortRiddim";
 import { FortRiddimPromo } from "./fort-riddim/FortRiddimPromo";
@@ -308,6 +309,16 @@ export const RemotionRoot: React.FC = () => {
           episodeLabel: reelData.episodeLabel,
           cta: reelData.cta,
         }}
+      />
+      {/* The reel's end bumper (#54): Fuse's scope switched off, with the YouTube handle in between. */}
+      <Composition
+        id="ReelOutro-YouTube"
+        component={YouTubeOutro}
+        durationInFrames={YOUTUBE_OUTRO_FRAMES}
+        fps={REEL_FPS}
+        width={REEL_WIDTH}
+        height={REEL_HEIGHT}
+        defaultProps={{ ...YOUTUBE_OUTRO_DEFAULTS, artist: "Fro" }}
       />
       <Composition
         id="SessionOpen"
