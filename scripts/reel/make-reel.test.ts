@@ -23,9 +23,19 @@ describe("make-reel (#55)", () => {
     expect(out[4].t).toBeCloseTo(1.4, 6);
   });
 
+  it("starts a page at the first word of a span even when it starts after the cut", () => {
+    const out = rebaseCaptions([w(10.1, 0.2, "host,"), w(10.53, 0.2, "yeah,"), w(10.8, 0.1, "so")], [
+      { start: 10, end: 10.5 },
+      { start: 10.5, end: 11 },
+    ]);
+    expect(out.map((x) => x.br)).toEqual([true, true, false]);
+  });
+
   it("applies word fixes by time", () => {
     const out = rebaseCaptions([w(10.1, 0.3, "trends")], [{ start: 10, end: 11 }], [{ t: 10.1, w: "trance" }]);
     expect(out[0].w).toBe("trance");
+    const dropped = rebaseCaptions([w(10.1, 0.1, "po"), w(10.3, 0.3, "police")], [{ start: 10, end: 11 }], [{ t: 10.1, match: "po", drop: true }]);
+    expect(dropped.map((x) => x.w)).toEqual(["police"]);
   });
 
   it("gives an unnamed span the centre crop and rejects bad shots", () => {

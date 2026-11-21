@@ -44,7 +44,8 @@ export type Segment = { start: number; end: number; shot?: string; note?: string
 /**
  * A correction to one transcribed word, keyed on its time in the source the spans are
  * measured in (the clean cut for a sesh-edit episode). `w` replaces the text; `at`/`d`
- * replace the timing.
+ * replace the timing; `drop` takes the word out of the captions (a stutter like "po
+ * police"), while the sound stays as it is.
  */
 export type WordFix = {
   t: number;
@@ -53,6 +54,7 @@ export type WordFix = {
   w?: string;
   at?: number;
   d?: number;
+  drop?: boolean;
 };
 export type ReelDef = {
   slug: string;
@@ -104,15 +106,18 @@ export function resolveCrops(def: Pick<ReelDef, "shots" | "floorY" | "segments">
 /**
  * Rebase source-timed words onto the clip's timeline: each span's words shifted to
  * where the span lands, words straddling a cut clipped to the span, the first word of
- * every span starting a new caption page.
+ * every span starting a new caption page (a new span is often a new speaker, and a
+ * page must not carry one speaker's words over the cut to the other).
  */
 export function rebaseCaptions(words: CaptionWord[], segments: Segment[], wordFixes: WordFix[] = []): CaptionWord[] {
   const out: CaptionWord[] = [];
   let from = 0;
   for (const segment of segments) {
     const shift = from / FPS - segment.start;
+    let first = true;
     for (const raw of words) {
       const fix = wordFixes.find((f) => Math.abs(f.t - raw.t) < 0.005 && (!f.match || f.match === raw.w));
+      if (fix?.drop) continue;
       const word = fix ? { ...raw, t: fix.at ?? raw.t, d: fix.d ?? raw.d, w: fix.w ?? raw.w } : raw;
       if (word.t + word.d <= segment.start || word.t >= segment.end) continue;
       // Clipped rather than dropped: losing it leaves a visible hole in the line.
@@ -122,8 +127,9 @@ export function rebaseCaptions(words: CaptionWord[], segments: Segment[], wordFi
         t: +(start + shift).toFixed(3),
         d: +(end - start).toFixed(3),
         w: word.w,
-        br: word.br || start === segment.start,
+        br: word.br || first,
       });
+      first = false;
     }
     from += Math.round((segment.end - segment.start) * FPS);
   }

@@ -208,7 +208,8 @@ checks that the clean cut's length matches the decisions.
 3. Write `<name>.reel.json` next to the episode (shape: `src/reel/data/example.reel.json`;
    paths are relative to the file): `episode.clean`, `episode.decisions`, `segments`
    (`start`, `end`, optional `shot`), `shots`, `artist`, `cta`, optional `wordFixes`
-   (`{t, w}` in clean time, for a misheard word).
+   (`{t, w}` in clean time for a misheard word, `{t, drop: true}` to take a stutter out of
+   the captions; the sound is never changed).
 4. `bun run reel <name>.reel.json` → `<slug>.reel.mp4` next to it, about 2 minutes on the GPU
    box. `--reuse-cut` re-renders without cutting again; `--cut-only` stops before the
    render and prints a props file for Studio (`bun run dev -- --props=<file>`).
