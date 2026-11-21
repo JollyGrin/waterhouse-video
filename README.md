@@ -39,7 +39,7 @@ people use for it in [TEMPLATES.md](TEMPLATES.md).
 
 Idents are **made** in Remotion and **composited** by sesh-edit: Fuse
 (`src/ident/Fuse.tsx`) is the Sessions intro, and `bun run render:intro`
-builds it into sesh-edit. Details: AGENTS.md, "Hand-off".
+builds its Fuse-Drums cut (the same picture on a drum track by Denzo's brother) into sesh-edit. Details: AGENTS.md, "Hand-off".
 
 ## Quick commands (developers)
 
@@ -50,7 +50,7 @@ ffmpeg, Bun and uv:
 git clone https://github.com/JollyGrin/waterhouse-video.git && cd waterhouse-video
 bun install                                  # animations (Remotion)
 (cd longform && uv sync)                     # video editing (sesh-edit)
-bun run render:intro                         # the Fuse intro sesh-edit needs (not in git)
+bun run render:intro                         # the Fuse-Drums intro sesh-edit needs (not in git)
 
 bunx remotion studio                         # preview every animation in the browser
 bun run render:recap --fixture               # render one: out/Recap-tj-gee-2026-09-03.mp4
@@ -93,7 +93,7 @@ Chromium).
 | **WaterhouseSession** | 10 s looping clip for the Tuesday "Waterhouse Sessions" night: the guest and Denzo side by side in the stream window, with the running order ("interview with Denzo, then live set") under it | The guest forwards it to friends before the session | `bun run render:session` (guests from the booking) or `--guest "Duncen"` |
 | **WeeklyLineup** | This week's lineup as a story | Instagram story | `bun run render:weekly` |
 | **SessionBumper** | A library of ready-made 3–4 s stingers that open onto a live scene. Landscape, webm with alpha, eight ideas: "door", "corner", "lamp", "paper", "neon", "vhs", "fader" and "flap". (The Sessions intro itself is Fuse, see [Idents](#idents-fuse--the-sessions-intro).) | OBS, as a Stinger transition into any scene | `bun run render:bumper --idea door` |
-| **Idents** (`src/ident/`) | Channel idents with alpha, portrait and 16:9. **Fuse is the Waterhouse Sessions intro**; FuseLines are three alternatives. See [Idents](#idents-fuse--the-sessions-intro) | Opening edited Sessions videos (sesh-edit bundles Fuse), OBS | `bun run render:ident Fuse-16x9` |
+| **Idents** (`src/ident/`) | Channel idents with alpha, portrait and 16:9. **Fuse is the Waterhouse Sessions intro**; FuseLines are three alternatives. See [Idents](#idents-fuse--the-sessions-intro) | Opening edited Sessions videos (sesh-edit bundles Fuse-Drums), OBS | `bun run render:ident Fuse-16x9` |
 
 Output lands in `out/` (gitignored). A clip takes 1–2 minutes to render.
 Renders are never committed: to see what a composition looks like, render it
@@ -395,6 +395,7 @@ redrawn beam. The other 24 are the prototype's other ideas, kept as stock.
 | Idea | Comp ids | What it is |
 | --- | --- | --- |
 | Fuse | `IdentFuse`, `IdentFuse-16x9` | **the Sessions intro** (5 s) |
+| Fuse-Drums | `IdentFuse-Drums`, `IdentFuse-Drums-16x9` | Fuse's picture on a 5 s cut of a track by Denzo's brother (used with permission), the big hit on the lock (f55): **the cut sesh-edit puts on edits** (`public/ident/audio/fusedrums/mix.wav`, committed; `fusedrums/gen-audio.py` re-cuts it from the song) |
 | FuseLines-Ink | `IdentFuseLines-Ink`, `IdentFuseLines-Ink-16x9` | Fuse with the beam as an ink line after the Waterhouse Radio poster, Denzo 4 semitones lower |
 | FuseLines-Wave | `IdentFuseLines-Wave`, `IdentFuseLines-Wave-16x9` | the ink line with wave echoes, Denzo 7 semitones lower |
 | FuseLines-Draft | `IdentFuseLines-Draft`, `IdentFuseLines-Draft-16x9` | the ink line as a draughtsman's drawing, Denzo 12 semitones lower |
@@ -447,14 +448,14 @@ Rendered files never go in git.
 
 **sesh-edit's intro.** The intro that sesh-edit prepends,
 `longform/src/sesh_edit/assets/intro/fuse-16x9.{webm,flac,json}`, is built from
-Fuse 16:9 (`IdentFuse-16x9`) by `bun run render:intro` (gitignored; run it once
-on a fresh clone, and after changing Fuse). It renders the ProRes master with
+Fuse-Drums 16:9 (`IdentFuse-Drums-16x9`) by `bun run render:intro` (gitignored; run it once
+on a fresh clone, and after changing Fuse or its drum track). The names stay `fuse-16x9.*`. It renders the ProRes master with
 `render:ident`, encodes the webm and flac, and writes `open_s` (frame 118 / 30).
 If the frame where the rings open moves, update `OPEN_FRAME` in
 `scripts/render-intro.ts`. `--reuse` skips the render if the `.mov` exists.
 
 **Sound and timing.** Each soundtrack is synthesised by a Python generator
-next to the code. The generator also writes the motion data the picture
+next to the code (except Fuse-Drums, a committed cut of a real track; see below). The generator also writes the motion data the picture
 reads. Both outputs are committed. After any timing change, re-run the
 generator so picture and sound stay locked:
 
@@ -474,6 +475,9 @@ the system Python. The scratch voice is `src/ident/scratchkit/denzo-waterhouse.w
 Denzo saying "Waterhouse", cut from the published Sessions video (YouTube
 mWNWTIGghjc). Ident-owned media lives in `public/ident/`. `public/audio/` stays
 for the other videos' sounds.
+
+**Credit.** Fuse-Drums soundtrack: a 5 s cut of a track by Denzo's brother, used with permission.
+TODO(Dean): his artist name and link.
 
 ### Just the numbers
 
@@ -529,7 +533,6 @@ normally.
 | FortRiddim | `fort-riddim/c1m.mp4`, `c1fx.mp4`, `c2fx.mp4`, `c3m.mp4`, `c3fx.mp4`, `soundtrack.wav`, `logo-white.png`, `poster/{boogie,disc,top,lineup,info}.png` | clips and soundtrack: `bun scripts/fort-riddim/make.ts --c1 IMG_2250.MOV --c2 IMG_2253.MOV --c3 IMG_2246.MOV` (or `FORT_RIDDIM_C1/_C2/_C3`) from Manuel's phone footage; logo and poster cut-outs: copied in by hand from the FORT RIDDIM poster artwork |
 | FortRiddimPromo | `fort-riddim/promo.mp4` | `bun run promo --source FORTRIDDIMPROMO.MP4` (or `FORT_RIDDIM_PROMO_SRC`), Manuel's disc animation |
 | FortRiddimShowcase | `fort-riddim/promo.mp4` | as FortRiddimPromo; `bun run showcase --source FORTRIDDIMPROMO.MP4` |
-| IdentFuse-Drums (all four cuts) | `audio/fuse-drums/mix.wav` | `uv run src/ident/fusedrums/gen-audio.py <song.wav>` cuts it from the drum track (62.4–67.4 s by default, `--start` to move it); get the song from Denzo privately, never through git |
 
 Ask whoever made the cut for the files, or regenerate them from the sources
 with the commands above.

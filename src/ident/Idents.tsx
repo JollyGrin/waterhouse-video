@@ -7,7 +7,7 @@ import React from "react";
 import { AbsoluteFill, Composition, Folder, staticFile } from "remotion";
 import { FPS, H, W } from "./brand";
 import { Backdrop } from "./common";
-import { Fuse, FUSE_DRUMS_AUDIO, FUSE_FRAMES, FuseDrums, FuseDrumsWide, FuseWide } from "./Fuse";
+import { Fuse, FUSE_FRAMES, FuseDrums, FuseDrumsWide, FuseWide } from "./Fuse";
 import { checkMedia, withMediaCheck } from "../MissingMedia";
 import { makeFuseLines } from "./FuseLines";
 import { Cymatics, CYMATICS_FRAMES, CymaticsWide } from "./Cymatics";
@@ -98,7 +98,7 @@ const fuseLines = (v: "ink" | "wave" | "draft", semitones: number): IdentParts =
 
 const PARTS: Record<string, IdentParts> = {
   Fuse: parts(Fuse, FuseWide, FUSE_FRAMES),
-  "Fuse-Drums": parts(FuseDrums, FuseDrumsWide, FUSE_FRAMES, [FUSE_DRUMS_AUDIO]),
+  "Fuse-Drums": parts(FuseDrums, FuseDrumsWide, FUSE_FRAMES),
   "FuseLines-Ink": fuseLines("ink", 4),
   "FuseLines-Wave": fuseLines("wave", 7),
   "FuseLines-Draft": fuseLines("draft", 12),

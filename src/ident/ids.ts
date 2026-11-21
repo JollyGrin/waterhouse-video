@@ -21,7 +21,7 @@ export interface IdentIdea {
 /** Fuse is the Sessions intro; FuseLines are its redrawn-beam alternatives. Studio lists these first. */
 export const SESSIONS_INTRO: IdentIdea[] = [
   { idea: "Fuse", wide: true, blurb: "the Sessions intro: the scope beam draws the mark, then it is scratched on a record (Splice's soundtrack)" },
-  { idea: "Fuse-Drums", wide: true, blurb: "Fuse's picture on a drum track, its big hit on the lock; the track is local only, see README" },
+  { idea: "Fuse-Drums", wide: true, blurb: "Fuse's picture on a drum track by Denzo's brother, its big hit on the lock: the intro sesh-edit puts on edits" },
   { idea: "FuseLines-Ink", wide: true, blurb: "Fuse with the beam redrawn as an ink line after the Waterhouse Radio poster; Denzo pressed 4 semitones lower" },
   { idea: "FuseLines-Wave", wide: true, blurb: "the ink line with wave echoes; Denzo 7 semitones lower" },
   { idea: "FuseLines-Draft", wide: true, blurb: "the ink line as a draughtsman's drawing (ruler, callouts); Denzo 12 semitones lower" },
