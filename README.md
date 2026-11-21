@@ -496,7 +496,7 @@ longer than the column breaks after its `_`/`.`/`-` (`src/reel/outro/layout.ts`)
 
 ```sh
 bunx remotion render ReelOutro-YouTube out/reel-outro.mp4
-bunx remotion render ReelOutro-YouTube out/reel-outro.mp4 --props '{"artist":"Fro"}'
+bunx remotion render ReelOutro-YouTube out/reel-outro.mp4 --props '{"artist":"Name"}'
 ```
 
 Sound: `public/audio/reel-outro/youtube-tail.wav` (mono, 44.1 kHz, true peak

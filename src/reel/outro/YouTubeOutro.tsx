@@ -32,7 +32,7 @@ export type YouTubeOutroProps = {
   handle: string;
   /** The line above it ("Full interview on YouTube"). */
   line: string;
-  /** The guest; shows as "WITH <ARTIST>" under the rule. */
+  /** The guest; shows as "WITH <ARTIST>" under the rule. Empty (the default) hides the line; the reel pipeline passes it. */
   artist?: string;
 };
 
@@ -314,7 +314,7 @@ export const YouTubeOutro: React.FC<Partial<YouTubeOutroProps>> = ({ handle = YO
               ) : null}
             </g>
             {extras && f >= T.rule ? <rect x={CX - 64} y={ruleY} width={128} height={5} fill={C.yellow} /> : null}
-            {extras && artist && f >= T.artist ? (
+            {extras && artist?.trim() && f >= T.artist ? (
               <text x={CX} y={artistBase} textAnchor="middle" fontFamily={FONT_MONO} fontWeight={500} fontSize={MONO.size} letterSpacing={MONO.spacing} fill={MONO.color}>
                 {`WITH ${artist.toUpperCase()}`}
               </text>

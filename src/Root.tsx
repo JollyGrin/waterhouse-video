@@ -318,7 +318,7 @@ export const RemotionRoot: React.FC = () => {
         fps={REEL_FPS}
         width={REEL_WIDTH}
         height={REEL_HEIGHT}
-        defaultProps={{ ...YOUTUBE_OUTRO_DEFAULTS, artist: "Fro" }}
+        defaultProps={{ ...YOUTUBE_OUTRO_DEFAULTS, artist: "" }}
       />
       <Composition
         id="SessionOpen"
