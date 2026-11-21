@@ -178,8 +178,13 @@ export function probeVideo(file: string): Probe | null {
   // probe and the alpha_mode tag.
   let res = query(["-c:v", "libvpx-vp9"]);
   if (res.exitCode !== 0) res = query([]);
+  return parseProbe(res.stdout.toString());
+}
+
+/** ffprobe's `default=nw=1` output to a Probe. Windows ffprobe ends lines with \r\n. */
+export function parseProbe(out: string): Probe | null {
   const fields = new Map<string, string>();
-  for (const line of res.stdout.toString().split("\n")) {
+  for (const line of out.split(/\r?\n/)) {
     const i = line.indexOf("=");
     if (i > 0) fields.set(line.slice(0, i), line.slice(i + 1));
   }

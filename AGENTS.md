@@ -136,15 +136,15 @@ graphics in sesh-edit.
 | Weekly board (ranked by crowd, badges) | Remotion `HouseWeekly` | `bun run render:weekly-board [--end YYYY-MM-DD]` | `out/HouseWeekly-<YYYY-Www>.mp4` |
 | Artist recap ("who showed up") | Remotion `ArtistRecap` | `bun run render:recap "Stage Name" [--n 6]`; `--fixture` for no network | `out/Recap-<artist>-<date>.mp4` |
 | Session poster / cover | Remotion `SessionPoster` / `SessionPosterType` | `bun run poster --name "Name" --date D.M.YYYY [--photo path-or-url] [--session N]`. No photo = type-only cover. A poster with a photo needs macOS 14+ (cut-out and face detection via Vision, README "macOS-only steps"); the type-only cover renders anywhere. All covers: `bun run covers`. On a fresh clone run `mkdir -p posters` first, or it renders the PNG and then fails saving `posters/state.json` | `out/posters/session-<nr>-<slug>.png` |
-| Idents / Sessions intro (**Fuse is the Sessions intro**; FuseLines-Ink/-Wave/-Draft are alternatives) | Remotion `IdentFuse` / `IdentFuse-16x9` etc. in `src/ident/` (Studio: Idents › Sessions-intro) | `bun run render:ident Fuse-16x9` (one comp), `--intro` (Fuse + FuseLines, both cuts), `--only preview,prores,webm`. `render:ident <Id>` for any of the other 24 idents (list: README "Idents"), `--all` for every one. Full renders on the GPU box. To rebuild sesh-edit's intro from Fuse: `bun run render:intro` (needs ffmpeg on PATH) | `out/ident/Ident<Id>-preview.mp4`, `.mov` (ProRes 4444 alpha, editing), `.webm` (VP9 alpha, OBS) |
+| Idents / Sessions intro (**Fuse is the Sessions intro**, sesh-edit uses its Fuse-Drums cut; FuseLines-Ink/-Wave/-Draft are alternatives) | Remotion `IdentFuse` / `IdentFuse-16x9` etc. in `src/ident/` (Studio: Idents › Sessions-intro) | `bun run render:ident Fuse-16x9` (one comp), `--intro` (Fuse + FuseLines, both cuts), `--only preview,prores,webm`. `render:ident <Id>` for any of the other 24 idents (list: README "Idents"), `--all` for every one. Full renders on the GPU box. To rebuild sesh-edit's intro (Fuse-Drums): `bun run render:intro` (needs ffmpeg on PATH) | `out/ident/Ident<Id>-preview.mp4`, `.mov` (ProRes 4444 alpha, editing), `.webm` (VP9 alpha, OBS) |
 | Stinger for OBS (transition into a scene) | Remotion `SessionBumper` | List the 8 ideas (door, corner, lamp, paper, neon, vhs, fader, flap) and offer contact sheets: `bun run render:bumper --idea <idea> --strip` also writes `out/Bumper-<idea>-frames.png` (every 10th frame). Then `bun run render:bumper --idea <idea>`. OBS settings and transition points: README "SessionBumper" | `out/Bumper-<idea>.webm` (alpha) |
 | Instagram reel (9:16) from an interview | Remotion `SessionReel` | `bun run reel src/reel/data/<slug>.reel.json`. Needs a cut episode and word captions; see [Reels](#reels-from-an-edited-interview) | `out/reels/` |
 | Edit a recorded Sessions interview (cut fillers, silences, pre-take chatter, A/V sync, mic mix, captions, intro) | sesh-edit | `cd longform && uv run sesh-edit <in> -o <out>.edited.mp4 --review` first, show the plan, then the same without `--review` | `<out>.edited.mp4`, `.srt`, `.decisions.json`, `.clean.mp4` |
 | Fix captions or a misheard word | sesh-edit | `cd longform && uv run sesh-edit <in> -o <out>.edited.mp4 --replace Waterhose=Waterhouse` (cached, ~40 s). Or edit the decisions file and use `--from-decisions` | overwrites the edit |
 | Manual cut, move the intro to the front, insert a clip, title card | sesh-edit | `--cut 20:03-20:29`, `--move-to-front`, `--insert-clip`, `--title-card` (times from the input file) | |
 | Make the 1080p version | sesh-edit | `uv run sesh-upscale <out>.clean.mp4 -o <out>.clean.1080p.mp4 --method lanczos` (laptop, minutes) or `--method x4plus` (GPU box, hours), then `uv run sesh-overlay <out>.decisions.json <out>.clean.1080p.mp4 -o <out>.edited.1080p.mp4` | `<out>.edited.1080p.mp4` |
-| Change the intro itself (Fuse) | Remotion `IdentFuse-16x9` | Edit `src/ident/Fuse.tsx` (preview in Studio), then `bun run render:intro`: renders it into `longform/src/sesh_edit/assets/intro/` (gitignored). If the frame where the rings open moves from 118, update `OPEN_FRAME` in `scripts/render-intro.ts` | `fuse-16x9.{webm,flac,json}` |
-| Add or change the intro on an edited video | sesh-edit | Default intro is Fuse, built by `bun run render:intro` (run it once before the first edit; sesh-edit says so if it's missing). `--intro FILE` for another alpha video, `--no-intro` for none. A new ident is made in Remotion first; see [Hand-off](#hand-off-remotion--sesh-edit) | |
+| Change the intro itself (Fuse-Drums) | Remotion `IdentFuse-Drums-16x9` | Edit `src/ident/Fuse.tsx` (picture) or the committed drum track `public/ident/audio/fusedrums/mix.wav` (a cut of Denzo's brother's track; `src/ident/fusedrums/gen-audio.py` re-cuts it from the song), preview in Studio, then `bun run render:intro`: renders it into `longform/src/sesh_edit/assets/intro/` (gitignored). If the frame where the rings open moves from 118, update `OPEN_FRAME` in `scripts/render-intro.ts` | `fuse-16x9.{webm,flac,json}` |
+| Add or change the intro on an edited video | sesh-edit | Default intro is Fuse-Drums, built by `bun run render:intro` (run it once before the first edit; sesh-edit says so if it's missing). `--intro FILE` for another alpha video, `--no-intro` for none. A new ident is made in Remotion first; see [Hand-off](#hand-off-remotion--sesh-edit) | |
 | Session logo reveal (masked open/close) | Remotion `SessionOpen` / `SessionClose` | Needs `public/session/head.mp4` / `tail.mp4`; see [Session logo reveal](#session-logo-reveal) | |
 | Change an animation's text, timing or colours | Remotion | Edit the composition in `src/`; the user previews in `bunx remotion studio` | |
 | A new animation, stinger, ident or poster style ("make me a new template") | Remotion | Follow [Templates](#templates-names-people-can-say): pick a sayable name, build it, register it, add it to `TEMPLATES.md` | |
@@ -282,7 +282,7 @@ So everyone's work looks like it comes from the same place:
 - **Branch, save and back up as you go, PR; never `main`.** See [Hard rules](#hard-rules-read-before-touching-anything).
   Stage files by name, never `git add -A`. Commit messages: a short line saying what changed, e.g. `neon stinger: shorter hold`.
 - Before a PR: `bun run lint` (eslint + tsc) and `bun run test` (it lists the root test files so `longform/` is never picked up); `bunx remotion
-  compositions` must list everything. `longform/` has no test suite yet:
+  compositions` must list everything. In `longform/`: `uv run pytest` (a small suite in `longform/tests/`), and
   check that `uv run sesh-edit --help` still runs.
 - Non-developer users: see [Talking to the team](#talking-to-the-team).
 
@@ -364,11 +364,12 @@ run end to end yet: that needs a real edit with the models downloaded.)
 3. `cd longform && uv run sesh-edit <in> -o <out>.edited.mp4 --intro ../out/Bumper-door.mov`.
    sesh-overlay reuses that intro for the 1080p version.
 
-The default intro, **Fuse**, is built into sesh-edit's asset folder
+The default intro, **Fuse-Drums** (Fuse's picture on a drum track by Denzo's brother), is
+built into sesh-edit's asset folder
 (`longform/src/sesh_edit/assets/intro/fuse-16x9.{webm,flac,json}`, gitignored)
-by `bun run render:intro`, from the Remotion comp `IdentFuse-16x9`
-(`src/ident/Fuse.tsx`). Run it once on a fresh clone before the first edit,
-and again after changing Fuse. See the "Intro" section of
+by `bun run render:intro`, from the Remotion comp `IdentFuse-Drums-16x9`
+(`src/ident/Fuse.tsx`, sound `public/ident/audio/fusedrums/mix.wav`). Run it
+once on a fresh clone before the first edit, and again after changing either. See the "Intro" section of
 `longform/README.md` for how the audio is levelled and captions held back.
 
 ## Session logo reveal
@@ -417,7 +418,7 @@ missing-media card.
 The full reference is `longform/README.md`. What matters most when driving it:
 
 - **Setup:** `cd longform && uv sync` (Python 3.12, pinned), then
-  `bun run render:intro` from the repo root (builds the Fuse intro). ffmpeg on PATH.
+  `bun run render:intro` from the repo root (builds the Fuse-Drums intro). ffmpeg on PATH.
   The `claude` CLI must be logged in: the LLM steps call `claude -p`
   headless, no API key. First run downloads ~3.5 GB of models.
 - **Always `--review` first** for a new file, and show the user the review
