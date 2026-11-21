@@ -4,10 +4,11 @@
  * variants) comes first in its own subfolder. Ids and the catalogue live in ./ids.
  */
 import React from "react";
-import { AbsoluteFill, Composition, Folder } from "remotion";
+import { AbsoluteFill, Composition, Folder, staticFile } from "remotion";
 import { FPS, H, W } from "./brand";
 import { Backdrop } from "./common";
-import { Fuse, FUSE_FRAMES, FuseWide } from "./Fuse";
+import { Fuse, FUSE_FRAMES, FuseDrums, FuseDrumsWide, FuseWide } from "./Fuse";
+import { checkMedia, withMediaCheck } from "../MissingMedia";
 import { makeFuseLines } from "./FuseLines";
 import { Cymatics, CYMATICS_FRAMES, CymaticsWide } from "./Cymatics";
 import { Deadpan, DEADPAN_FRAMES } from "./Deadpan";
@@ -74,13 +75,19 @@ interface IdentParts {
   tall: Cut;
   wide?: Cut;
   frames: number;
+  /** Gitignored files under public/ it plays: a "Missing media" card instead of a 404 when absent. */
+  media?: string[];
 }
 
-const cut = (C: React.FC): Cut => ({ C: asInPrototype(C), Preview: withBackdrop(C) });
-const parts = (Tall: React.FC, Wide: React.FC | null, frames: number): IdentParts => ({
-  tall: cut(Tall),
-  wide: Wide ? cut(Wide) : undefined,
+const cut = (C: React.FC, checked: boolean): Cut => {
+  const wrap = (X: React.FC) => (checked ? (withMediaCheck(X) as React.FC) : X);
+  return { C: wrap(asInPrototype(C)), Preview: wrap(withBackdrop(C)) };
+};
+const parts = (Tall: React.FC, Wide: React.FC | null, frames: number, media?: string[]): IdentParts => ({
+  tall: cut(Tall, !!media),
+  wide: Wide ? cut(Wide, !!media) : undefined,
   frames,
+  media,
 });
 
 // FuseLines: the scope beam redrawn after the Waterhouse Radio poster, each on a lower Denzo pressing.
@@ -91,6 +98,7 @@ const fuseLines = (v: "ink" | "wave" | "draft", semitones: number): IdentParts =
 
 const PARTS: Record<string, IdentParts> = {
   Fuse: parts(Fuse, FuseWide, FUSE_FRAMES),
+  "Fuse-Drums": parts(FuseDrums, FuseDrumsWide, FUSE_FRAMES),
   "FuseLines-Ink": fuseLines("ink", 4),
   "FuseLines-Wave": fuseLines("wave", 7),
   "FuseLines-Draft": fuseLines("draft", 12),
@@ -125,14 +133,16 @@ const IdeaFolder: React.FC<{ i: IdentIdea }> = ({ i }) => {
   if (!p) throw new Error(`No components registered for ident "${i.idea}"`);
   const id = `${IDENT_PREFIX}${i.idea}`;
   const { frames } = p;
+  const media = p.media;
+  const check = media ? checkMedia(() => media.map((m) => staticFile(m))) : undefined;
   return (
     <Folder name={i.idea}>
-      <Composition id={id} component={p.tall.C} durationInFrames={frames} fps={FPS} width={W} height={H} />
-      <Composition id={`${id}-preview`} component={p.tall.Preview} durationInFrames={frames} fps={FPS} width={W} height={H} />
+      <Composition id={id} component={p.tall.C} durationInFrames={frames} fps={FPS} width={W} height={H} calculateMetadata={check} />
+      <Composition id={`${id}-preview`} component={p.tall.Preview} durationInFrames={frames} fps={FPS} width={W} height={H} calculateMetadata={check} />
       {p.wide ? (
         <>
-          <Composition id={`${id}-16x9`} component={p.wide.C} durationInFrames={frames} fps={FPS} width={WIDE_W} height={WIDE_H} />
-          <Composition id={`${id}-16x9-preview`} component={p.wide.Preview} durationInFrames={frames} fps={FPS} width={WIDE_W} height={WIDE_H} />
+          <Composition id={`${id}-16x9`} component={p.wide.C} durationInFrames={frames} fps={FPS} width={WIDE_W} height={WIDE_H} calculateMetadata={check} />
+          <Composition id={`${id}-16x9-preview`} component={p.wide.Preview} durationInFrames={frames} fps={FPS} width={WIDE_W} height={WIDE_H} calculateMetadata={check} />
         </>
       ) : null}
     </Folder>

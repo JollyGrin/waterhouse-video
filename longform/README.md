@@ -16,7 +16,7 @@ Outputs, next to `-o` (default: next to the input):
 
 | file | what |
 |---|---|
-| `<name>.edited.mp4` | the edit: the [Fuse intro](#intro) then the interview, h264 + aac, captions burned in, one encode pass |
+| `<name>.edited.mp4` | the edit: the [Fuse-Drums intro](#intro) then the interview, h264 + aac, captions burned in, one encode pass |
 | `<name>.clean.mp4` | the same cut and audio with no intro, no captions and blank title cards: input for `sesh-upscale` (skip with `--no-clean`) |
 | `<name>.edited.srt` | the same captions, timed to the edited timeline |
 | `<name>.decisions.json` | every decision: cuts (with kind + context), keep segments, A/V offset (both checks), pre-take cut, review list, stats |
@@ -31,7 +31,7 @@ rendering and prints the plan.
 brew install ffmpeg          # any build works: captions are drawn with Pillow, no libass/drawtext needed
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync                      # pins Python 3.12 (see .python-version)
-(cd .. && bun run render:intro)   # before your first edit: builds the Fuse intro from the Remotion source
+(cd .. && bun run render:intro)   # before your first edit: builds the Fuse-Drums intro from the Remotion source
 ```
 
 The intro files (`src/sesh_edit/assets/intro/fuse-16x9.{webm,flac,json}`) are not in git:
@@ -94,8 +94,8 @@ followed by a title card also dips to black. Captions never run over an insert.
 
 ## Intro
 
-`<name>.edited.mp4` and `<name>.edited.1080p.mp4` open with **Fuse**, the Waterhouse Sessions
-ident (5 s, with alpha). The interview starts playing underneath at 3.933 s (Fuse frame 118),
+`<name>.edited.mp4` and `<name>.edited.1080p.mp4` open with **Fuse-Drums** (Fuse's picture on a
+drum track by Denzo's brother), the Waterhouse Sessions ident (5 s, with alpha). The interview starts playing underneath at 3.933 s (Fuse frame 118),
 when the ident's rings open onto it, so the output is 3.933 s + the edit. `<name>.clean.mp4`
 never gets the intro: it stays the upscale input, and `sesh-overlay` adds the intro at 1080p.
 
@@ -109,16 +109,20 @@ never gets the intro: it stays the upscale input, and `sesh-overlay` adds the in
   ident is on screen: a line that would start under it starts when it ends (5.0 s).
 - **decisions.json:** `intro` records the file, `open_s` and `level_lu` (relative level,
   default 0); `render.intro` records the measured LUFS and the applied gain, which
-  `sesh-overlay` reuses. `--from-decisions` renders the recorded intro unless `--no-intro`
+  `sesh-overlay` reuses while the intro still measures within 0.5 LU of the recorded
+  `intro_lufs`. If the intro was rebuilt since the edit (e.g. episodes edited with the old Fuse
+  soundtrack, before Fuse-Drums), it says so, ignores the recorded gain and matches the level
+  again to the recorded `speech_lufs`. `--from-decisions` renders the recorded intro unless `--no-intro`
   or `--intro` is given. Decisions from before the intro existed get the default Fuse.
 
 Asset: `src/sesh_edit/assets/intro/fuse-16x9.{webm,flac,json}` is built, not committed:
-`bun run render:intro` at the repo root renders the Remotion comp `IdentFuse-16x9`
-(`src/ident/Fuse.tsx`) to ProRes 4444, then
-`ffmpeg -i IdentFuse-16x9.mov -an -c:v libvpx-vp9 -pix_fmt yuva420p -crf 30 -b:v 0 -auto-alt-ref 0 fuse-16x9.webm`
+`bun run render:intro` at the repo root renders the Remotion comp `IdentFuse-Drums-16x9`
+(`src/ident/Fuse.tsx`: Fuse's picture on `public/ident/audio/fusedrums/mix.wav`)
+to ProRes 4444, then
+`ffmpeg -i IdentFuse-Drums-16x9.mov -an -c:v libvpx-vp9 -pix_fmt yuva420p -crf 30 -b:v 0 -auto-alt-ref 0 fuse-16x9.webm`
 (no colour flags: the master's tags pass through untouched),
-`ffmpeg -i IdentFuse-16x9.mov -vn -c:a flac fuse-16x9.flac`, and writes `fuse-16x9.json` with
-`open_s` = frame 118 / 30. To change the intro, edit the Fuse comp and re-run `render:intro`.
+`ffmpeg -i IdentFuse-Drums-16x9.mov -vn -c:a flac fuse-16x9.flac`, and writes `fuse-16x9.json` with
+`open_s` = frame 118 / 30. To change the intro, edit the Fuse comp or its drum track and re-run `render:intro`.
 The wheel bundles the files through hatch `artifacts` (pyproject.toml). ffmpeg only decodes
 VP9 alpha with `-c:v libvpx-vp9` before `-i` (the code does this).
 
@@ -257,7 +261,7 @@ What each job writes into `out_dir`:
 | file | |
 |---|---|
 | `<name>.review.txt` | the plan and review list from `sesh-edit --review`: read it before approving |
-| `<name>.edited.mp4`, `.edited.srt`, `.decisions.json`, `.clean.mp4` | as from sesh-edit: Fuse intro, no outro, captions burned in. Rendered from the reviewed decisions (`--from-decisions`), so it is exactly the plan that was approved |
+| `<name>.edited.mp4`, `.edited.srt`, `.decisions.json`, `.clean.mp4` | as from sesh-edit: Fuse-Drums intro, no outro, captions burned in. Rendered from the reviewed decisions (`--from-decisions`), so it is exactly the plan that was approved |
 | `<name>.preview.mp4` | the edit at 360p, mono audio, ~180 kbit/s (~1.3 MB per minute): for checking timing and sound |
 | `<name>.upscale-compare.mp4` | only with `upscale`: the sample side by side (centre half of the frame), the original scaled up plainly on the left, the upscale on the right |
 | `<name>.edited.1080p.mp4` | only after `--approve-upscale`: `sesh-upscale` + `sesh-overlay` |

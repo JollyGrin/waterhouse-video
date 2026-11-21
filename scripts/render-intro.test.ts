@@ -5,7 +5,8 @@ import { IDENT_COMP_IDS } from "../src/ident/ids";
 import { INTRO_COMP, INTRO_DIR, encodeCommands, sidecar } from "./render-intro";
 
 describe("render:intro", () => {
-  it("renders the 16:9 Fuse comp into the sesh-edit asset folder", () => {
+  it("renders the 16:9 Fuse-Drums comp into the sesh-edit asset folder", () => {
+    expect(INTRO_COMP).toBe("IdentFuse-Drums-16x9");
     expect(IDENT_COMP_IDS).toContain(INTRO_COMP);
     expect(INTRO_DIR).toBe(join("longform", "src", "sesh_edit", "assets", "intro"));
     // intro.py reads this exact name by default

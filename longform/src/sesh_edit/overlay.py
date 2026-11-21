@@ -4,8 +4,9 @@ own resolution (typically the 1080p output of sesh-upscale).
     sesh-overlay session.decisions.json session.clean.1080p.mp4 -o session.edited.1080p.mp4
 
 The video must be the clean cut of the same decisions (frame n = output frame n), at any
-resolution. The intro recorded in the decisions (default: the Fuse ident) is prepended, its
-soundtrack mixed over the start of the clean cut's audio at the gain sesh-edit used; with no
+resolution. The intro recorded in the decisions (default: Fuse-Drums, Fuse's picture on a drum
+track by Denzo's brother) is prepended, its soundtrack mixed over the start of the clean cut's audio at the gain
+sesh-edit used (matched again if the intro has changed since, see intro.REMATCH_LU); with no
 intro the audio is copied through untouched."""
 from __future__ import annotations
 
@@ -79,14 +80,21 @@ def main(argv: list[str] | None = None) -> int:
         b = subprocess.run(["ffmpeg", "-v", "error", "-i", str(vid), "-vn", "-ac", str(ch), "-ar", str(sr),
                             "-f", "f32le", "-"], capture_output=True, check=True).stdout
         body = np.frombuffer(b, np.float32).reshape(-1, ch)
-        gain = ((dec.get("render") or {}).get("intro") or {}).get("gain_db")  # the level sesh-edit matched
-        mixed, iinfo = intro_mod.mix_audio(body, sr, intro, fps, gain_db=gain)
+        rec = (dec.get("render") or {}).get("intro") or {}
+        gain = rec.get("gain_db")  # the level sesh-edit matched, for the intro as it measured then
+        mixed, iinfo = intro_mod.mix_audio(body, sr, intro, fps, speech_lufs=rec.get("speech_lufs"), gain_db=gain,
+                                           recorded_lufs=rec.get("intro_lufs"))
         del body
         audio_src, audio_copy = Path(tmp.name) / "audio_intro.wav", False
         sf.write(str(audio_src), mixed, sr, subtype="FLOAT")
         del mixed
+        if iinfo.get("rematched"):
+            print(f"  intro {intro['file']} has changed since the edit ({iinfo['intro_lufs']:.1f} LUFS now, "
+                  f"{iinfo['recorded_intro_lufs']:.1f} recorded): ignoring the recorded gain "
+                  f"{iinfo['stale_gain_db']:+.1f} dB and matching the level again", flush=True)
+        how = "measured" if gain is None or iinfo.get("rematched") else "from decisions"
         print(f"  intro {intro['file']}: interview from {iinfo['offset_s']:.3f}s (frame {off}), intro gain "
-              f"{iinfo.get('gain_db', 0):+.1f} dB ({'from decisions' if gain is not None else 'measured'})", flush=True)
+              f"{iinfo.get('gain_db', 0):+.1f} dB ({how})", flush=True)
 
     dec_proc = subprocess.Popen(["ffmpeg", "-v", "error", "-i", str(vid), "-an", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
                                 stdout=subprocess.PIPE)

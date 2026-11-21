@@ -26,7 +26,7 @@ batch picks it up before it finishes.
 
 Per job: download (Dropbox dl=0 -> dl=1, rlkey kept; resumes a partial download) ->
 `sesh-edit --review` (plan + review list into <name>.review.txt) -> stop for approval, unless
-approved -> render from that exact plan (`--from-decisions`, Fuse intro, no outro, captions) ->
+approved -> render from that exact plan (`--from-decisions`, Fuse-Drums intro, no outro, captions) ->
 <name>.preview.mp4 (small, for checking timing and sound) -> if the job asks for an upscale:
 a ~25 s comparison sample (<name>.upscale-compare.mp4, original left, upscaled right) and a stop
 for approval -> sesh-upscale + sesh-overlay -> <name>.edited.1080p.mp4.
@@ -568,7 +568,7 @@ def run_job(job: dict, man: dict, status: Status, opts, echo=print) -> str:
             return "awaiting-review"
         elif step == "render":
             status.set(name, state="rendering", error=None, approved_sig=sig)
-            say("rendering (Fuse intro, captions)")
+            say("rendering (Fuse-Drums intro, captions)")
             run_tool(py("cli") + [str(out["decisions"]), "--from-decisions", str(out["decisions"]),
                                   "-o", str(out["edited"]), *job["args"]], out["log"], echo)
             status.set(name, rendered_sig=sig)
@@ -652,7 +652,7 @@ def preflight(need_llm: bool) -> list[str]:
     if need_llm and not shutil.which("claude"):
         problems.append("the claude CLI is not on PATH (sesh-edit's LLM steps need it, logged in)")
     if not intro.resolve(intro.DEFAULT_FILE).exists():
-        problems.append("the Fuse intro is not built: run `bun run render:intro` at the repo root")
+        problems.append("the Fuse-Drums intro is not built: run `bun run render:intro` at the repo root")
     return problems
 
 

@@ -32,7 +32,7 @@ packages = ["src/sesh_edit"]
 artifacts = ["src/sesh_edit/assets/intro/fuse-16x9.*"]
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = ["pytest>=9.2.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

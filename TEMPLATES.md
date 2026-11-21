@@ -6,7 +6,10 @@ to Claude ("make the PullUp promo for Friday", "render the door stinger",
 WhatsApp so others can use the same thing.
 
 When you make a new template, Claude names it, adds it here and tells you
-the name. Rules for names and where things go: [AGENTS.md, "Templates"](AGENTS.md#templates-names-people-can-say).
+the name. It also commits the template's sounds and pictures with it (small,
+and only ones we made or may publish: no songs by other artists), so the
+template renders for everyone once Dean adds it. Rules for names, media and
+where things go: [AGENTS.md, "Templates"](AGENTS.md#templates-names-people-can-say).
 
 To see any of them move: ask Claude to *"open Remotion Studio"* and click
 the name in the list on the left.
@@ -47,7 +50,8 @@ stinger".
 ## Idents and the Sessions intro
 
 Short logo animations. **Fuse is the Sessions intro**: sesh-edit puts it at
-the start of every edited interview. Say "render the <name> ident"; most
+the start of every edited interview, in its **Fuse-Drums** cut (the same
+picture on a drum track by Denzo's brother). Say "render the <name> ident"; most
 work in both 9:16 and 16:9.
 
 | Name | What it is | Format |
@@ -87,3 +91,4 @@ New templates go here: name, what it is, how to ask for it, who made it.
 
 | Name | What it is | Say | Made by |
 |---|---|---|---|
+| **Fuse-Drums** | the Fuse intro's picture on a 5 s cut of "hu", a track Denzo's brother made for Waterhouse, its big hit on the logo lock. The intro sesh-edit puts on edited interviews. The cut is in the repo (`public/ident/audio/fusedrums/mix.wav`); `uv run src/ident/fusedrums/gen-audio.py <song.wav>` re-cuts it from the song | "render the Fuse-Drums intro" | Denzo |

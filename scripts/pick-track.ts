@@ -2,7 +2,7 @@
 /**
  * Pick this week's music bed for the WeeklyLineup video.
  *
- *   bun scripts/pick-track.ts                  # pick, install into public/audio, print props JSON
+ *   bun scripts/pick-track.ts                  # pick, install into public/audio/private, print props JSON
  *   bun scripts/pick-track.ts --dry-run        # report pool status, touch nothing
  *   bun scripts/pick-track.ts --track "Sheeq"  # force a track (substring match)
  *   bun scripts/pick-track.ts --reset          # start a fresh round early
@@ -25,7 +25,8 @@ import { basename, extname, join } from "path";
 import { ffEnv, findBin } from "./lib/ff";
 
 const STATE_PATH = "weekly/state.json";
-const AUDIO_DIR = "public/audio";
+// Copyrighted: gitignored, never committed (scripts/private-media.ts, #50).
+const AUDIO_DIR = "public/audio/private";
 const AUDIO_EXTS = [".mp3", ".wav", ".flac", ".aiff", ".aif", ".m4a"];
 
 // ffmpeg from PATH, else the one Remotion ships (see scripts/lib/ff.ts).
@@ -111,7 +112,7 @@ function ffmpeg(args: string[]) {
   execFileSync(FFMPEG, ["-hide_banner", "-v", "error", ...args], { env: ffEnv(FFMPEG) });
 }
 
-/** Put the track into public/audio as browser-playable mp3, return the path under public/. */
+/** Put the track into public/audio/private as browser-playable mp3, return the path under public/. */
 function installTrack(sourcePath: string, slug: string): string {
   mkdirSync(AUDIO_DIR, { recursive: true });
   const ext = extname(sourcePath).toLowerCase();
@@ -244,7 +245,7 @@ function main() {
   const slug = slugify(title);
   const target = installTrack(sourcePath, slug);
   const audioStartFrom = findDrop(target, need);
-  const audioTrack = `audio/${slug}.mp3`;
+  const audioTrack = `audio/private/${slug}.mp3`;
 
   state.used.push(choice);
   state.history.push({

@@ -7,8 +7,20 @@ dist
 out
 build
 
-# Weekly music tracks (copyrighted) + local test audio — keep out of the public repo
-public/audio/
+# Template media is committed (#50): public/audio/<kit>/ and public/ident/ are
+# tracked, as long as each file is small and ours. What stays out is private
+# or large; scripts/private-media.ts lists it with where it comes from.
+# Copyrighted music (the weekly lineup beds) and local test audio:
+public/audio/private/
+# loose tracks left directly in public/audio/ (the old pick-track, test songs)
+public/audio/*.mp3
+public/audio/*.wav
+public/audio/*.flac
+public/audio/*.aif*
+public/audio/*.m4a
+# Denzo's old local copy of the Fuse-Drums clip (#49); the committed clip
+# lives under public/ident/audio/fusedrums/
+public/audio/fuse-drums/
 
 # Working files for the session video edit (large intermediates)
 work/

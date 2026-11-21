@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { hasAlpha, parseArgs } from "./render-bumper";
+import { hasAlpha, parseArgs, parseProbe } from "./render-bumper";
 
 describe("parseArgs (bumper)", () => {
   it("reads the idea and the flags", () => {
@@ -80,5 +80,13 @@ describe("hasAlpha", () => {
     expect(
       hasAlpha({ codec: "vp9", pixFmt: "yuv420p", alphaMode: false }),
     ).toBe(false);
+  });
+});
+
+describe("parseProbe", () => {
+  it("reads ffprobe output with Windows line endings", () => {
+    const p = parseProbe("codec_name=vp9\r\npix_fmt=yuva420p\r\nTAG:alpha_mode=1\r\n");
+    expect(p).toEqual({ codec: "vp9", pixFmt: "yuva420p", alphaMode: true });
+    expect(hasAlpha(p!, "webm")).toBe(true);
   });
 });
