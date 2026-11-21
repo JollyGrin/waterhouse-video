@@ -1,7 +1,8 @@
 """Verbatim transcription (keeps fillers) + CTC forced alignment for word timings.
 
 Step A: CrisperWhisper (a Whisper large-v3 fine-tune trained to transcribe
-verbatim: it emits fillers as [UH]/[UM] instead of dropping them). Runs on MPS.
+verbatim: it emits fillers as [UH]/[UM] instead of dropping them). Runs on CUDA
+(the GPU box), MPS (Apple Silicon) or CPU, in fp16 on a GPU.
 Its word timestamps under stock `transformers` are contiguous (no gaps), so:
 
 Step B: wav2vec2 CTC forced alignment (Viterbi over the character trellis,
@@ -23,7 +24,24 @@ SR = 16000
 def _device():
     import torch
 
+    if torch.cuda.is_available():
+        return "cuda"
     return "mps" if torch.backends.mps.is_available() else "cpu"
+
+
+def _dtype(dev: str):
+    import torch
+
+    return torch.float16 if dev in ("cuda", "mps") else torch.float32
+
+
+def _free(dev: str) -> None:
+    import torch
+
+    if dev == "mps":
+        torch.mps.empty_cache()
+    elif dev == "cuda":
+        torch.cuda.empty_cache()
 
 
 def split_chunks(audio: np.ndarray, max_s: float = 28.0, min_s: float = 8.0) -> list[tuple[int, int]]:
@@ -38,7 +56,13 @@ def split_chunks(audio: np.ndarray, max_s: float = 28.0, min_s: float = 8.0) -> 
         if n - s <= max_s * 100:
             chunks.append((s * hop, len(audio)))
             break
-        lo, hi = s + int(min_s * 100), s + int(max_s * 100)
+        # Clamp the search window: when robust() halves a short chunk, min_s can go
+        # negative, which made rms[lo:hi] an empty slice and crashed argmin. Keep
+        # every piece at least 1 s long.
+        lo, hi = s + int(max(min_s, 1.0) * 100), min(n, s + int(max_s * 100))
+        if hi <= lo:
+            chunks.append((s * hop, len(audio)))
+            break
         cut = lo + int(np.argmin(rms[lo:hi]))
         chunks.append((s * hop, cut * hop))
         s = cut
@@ -80,7 +104,8 @@ def asr(audio: np.ndarray, log=print) -> list[dict]:
     from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
     dev = _device()
-    dtype = torch.float16 if dev == "mps" else torch.float32
+    dtype = _dtype(dev)
+    log(f"    asr on {dev} ({str(dtype).removeprefix('torch.')})")
     model = AutoModelForSpeechSeq2Seq.from_pretrained(ASR_MODEL, torch_dtype=dtype, low_cpu_mem_usage=True).to(dev).eval()
     proc = AutoProcessor.from_pretrained(ASR_MODEL)
     chunks = split_chunks(audio)
@@ -128,8 +153,7 @@ def asr(audio: np.ndarray, log=print) -> list[dict]:
     if retried:
         log(f"    asr: {retried} chunk(s) re-decoded after loop detection")
     del model
-    if dev == "mps":
-        torch.mps.empty_cache()
+    _free(dev)
     return out
 
 
@@ -253,6 +277,7 @@ def align(audio: np.ndarray, chunks: list[dict], log=print) -> list[dict]:
     if failed:
         log(f"    align: {failed} chunk(s) failed to align (even-spread fallback)")
     del model
+    _free(dev)
     return words
 
 

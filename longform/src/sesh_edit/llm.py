@@ -35,7 +35,9 @@ def ask_json(prompt: str, cache_dir: Path, model: str = "sonnet", image: Path | 
         cmd += ["--allowedTools", "Read", "--add-dir", str(image.parent)]
         cwd = str(image.parent)
         prompt = f"First, use the Read tool to view the image at {image.resolve()}.\n\n" + prompt
-    p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+    # utf-8 both ways: the Windows default (cp1252) garbles the reply and fails on some transcript characters
+    p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       timeout=timeout, cwd=cwd)
     if p.returncode != 0:
         raise RuntimeError(f"claude CLI failed ({p.returncode}): {p.stderr[-500:]} {p.stdout[-500:]}")
     env = json.loads(p.stdout)
