@@ -29,6 +29,10 @@ public/session/
 # Large media and per-machine state — local only
 public/fort-riddim/
 public/reel/
+# Reel definitions for real interviews quote the transcript (#55): keep them next to
+# the episode (sesh-out/reel/). Only the made-up example is committed.
+*.reel.json
+!src/reel/data/example.reel.json
 public/artists/
 posters/state.json
 weekly/state.json

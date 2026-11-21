@@ -169,6 +169,58 @@ prepends the intro recorded in the decisions (mixing its soundtrack over the cle
 the gain sesh-edit used; with no intro the audio is copied), and writes a matching `.srt`. Background and measurements:
 [docs/quality-and-upscaling.md](docs/quality-and-upscaling.md).
 
+## A reel from an episode
+
+"Make a reel from the best 30 seconds of the <guest> interview": a 20–30 s Instagram reel
+(1080×1920, 30 fps) with the Fuse-Drums intro in front, the clip cropped to 9:16 with big
+captions, and the YouTube end bumper ("Full interview on YouTube", @Waterhouse_Studios, "WITH <guest>"; `"outro": "card"` brings back the old end card). It is built in Remotion from the repo root (`SessionReel`,
+`scripts/reel/make-reel.ts`, #55); sesh-edit only supplies the episode.
+
+**What it needs:** the clean cut (`<name>.clean.mp4`, or its upscale
+`<name>.clean.x4plus1080p.mp4`, which reads better at 9:16) and `<name>.decisions.json`.
+The words come from the decisions file, mapped onto the clean cut the way sesh-edit places
+its own captions. Nothing is re-transcribed.
+
+**No clean cut on disk** (it was edited with `--no-clean`, or it was deleted): rebuild it
+from the decisions, without re-planning or re-editing. Write to a scratch folder so the
+finished edit isn't touched:
+
+```sh
+uv run sesh-edit <name>.decisions.json --from-decisions <name>.decisions.json --no-intro -o <scratch>/<name>.edited.mp4
+```
+
+That re-renders the same cut from the original recording (the decisions' `input`) and writes
+`<scratch>/<name>.clean.mp4`, plus an edited copy you can delete. It takes about as long as
+a normal render (a 27-minute 1080p25 interview: about 30 minutes on the GPU box). make-reel
+checks that the clean cut's length matches the decisions.
+
+**Steps** (from the repo root; keep everything for a real interview outside the repo, e.g.
+`C:\Users\<you>\Videos\sesh-out\reel\`):
+
+1. Pick the span. Spans are in **clean-cut seconds**. A time from the finished edit or its
+   `.srt` is clean time plus the intro offset (~3.93 s), and a quote is the safest anchor:
+   `bun scripts/reel/find-words.ts <name>.decisions.json "the quoted words" --near 12:34`
+   prints each match in clean and edit time with the words around it.
+2. Pick the crops: `bun scripts/reel/stills.ts <name>.reel.json` (or a video) writes stills
+   with a 100 px grid and every crop in `shots` drawn on, to `work/reel-stills/<slug>/`.
+   A crop is `{x, y, width, height}` in source pixels, 9:16 (height = width × 16 / 9);
+   a span without `shot` gets the centre crop.
+3. Write `<name>.reel.json` next to the episode (shape: `src/reel/data/example.reel.json`;
+   paths are relative to the file): `episode.clean`, `episode.decisions`, `segments`
+   (`start`, `end`, optional `shot`), `shots`, `artist`, `cta`, optional `wordFixes`
+   (`{t, w}` in clean time for a misheard word, `{t, drop: true}` to take a stutter out of
+   the captions; the sound is never changed).
+4. `bun run reel <name>.reel.json` → `<slug>.reel.mp4` next to it, about 2 minutes on the GPU
+   box. `--reuse-cut` re-renders without cutting again; `--cut-only` stops before the
+   render and prints a props file for Studio (`bun run dev -- --props=<file>`).
+
+**Sound:** the intro is gained to the clip's loudness, capped so its own true peak stays under
+−1 dBTP (as `intro.mix_audio` does for the 16:9 edit). The YouTube bumper's tail is pre-gained by
+the opposite of the master's gain, so it ends up at its designed level. Then the whole reel gets one gain to
+−14 LUFS and a 192 kHz true-peak limiter; the encoded file is measured and must land at
+−14 ± 0.5 LUFS and ≤ −1 dBTP. Remotion's file is 42.7 ms late on sound (AAC priming); that is
+trimmed before mastering (checked by cross-correlation: within 2 ms after).
+
 ## Machines & getting videos in (Dropbox → GPU box)
 
 Heavy work (transcription, the x4plus upscale) runs on the **GPU box**, the Windows 10 PC

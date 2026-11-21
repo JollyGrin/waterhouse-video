@@ -139,7 +139,7 @@ graphics in sesh-edit.
 | Session poster / cover | Remotion `SessionPoster` / `SessionPosterType` | `bun run poster --name "Name" --date D.M.YYYY [--photo path-or-url] [--session N]`. No photo = type-only cover. A poster with a photo needs macOS 14+ (cut-out and face detection via Vision, README "macOS-only steps"); the type-only cover renders anywhere. All covers: `bun run covers`. On a fresh clone run `mkdir -p posters` first, or it renders the PNG and then fails saving `posters/state.json` | `out/posters/session-<nr>-<slug>.png` |
 | Idents / Sessions intro (**Fuse is the Sessions intro**, sesh-edit uses its Fuse-Drums cut; FuseLines-Ink/-Wave/-Draft are alternatives) | Remotion `IdentFuse` / `IdentFuse-16x9` etc. in `src/ident/` (Studio: Idents › Sessions-intro) | `bun run render:ident Fuse-16x9` (one comp), `--intro` (Fuse + FuseLines, both cuts), `--only preview,prores,webm`. `render:ident <Id>` for any of the other 24 idents (list: README "Idents"), `--all` for every one. Full renders on the GPU box. To rebuild sesh-edit's intro (Fuse-Drums): `bun run render:intro` (needs ffmpeg on PATH) | `out/ident/Ident<Id>-preview.mp4`, `.mov` (ProRes 4444 alpha, editing), `.webm` (VP9 alpha, OBS) |
 | Stinger for OBS (transition into a scene) | Remotion `SessionBumper` | List the 8 ideas (door, corner, lamp, paper, neon, vhs, fader, flap) and offer contact sheets: `bun run render:bumper --idea <idea> --strip` also writes `out/Bumper-<idea>-frames.png` (every 10th frame). Then `bun run render:bumper --idea <idea>`. OBS settings and transition points: README "SessionBumper" | `out/Bumper-<idea>.webm` (alpha) |
-| Instagram reel (9:16) from an interview | Remotion `SessionReel` | `bun run reel src/reel/data/<slug>.reel.json`. Needs a cut episode and word captions; see [Reels](#reels-from-an-edited-interview) | `out/reels/` |
+| Instagram reel (9:16) from an interview ("the best 30 seconds of the <guest> interview") | Remotion `SessionReel` | Write `<name>.reel.json` **next to the episode's outputs** (never in the repo), then `bun run reel <that file>`. Needs the episode's clean cut + decisions; see [Reels](#reels-from-an-edited-interview) | `<slug>.reel.mp4` next to the definition |
 | The reel's end bumper ("full interview on YouTube") | Remotion `ReelOutro-YouTube` | `bunx remotion render ReelOutro-YouTube out/reel-outro.mp4 --props '{"artist":"Name"}'`; `src/reel/outro/YouTubeOutro.tsx` exports `YouTubeOutro` and `YOUTUBE_OUTRO_FRAMES` for the reel pipeline. README "ReelOutro-YouTube" | `out/reel-outro.mp4` |
 | Edit a recorded Sessions interview (cut fillers, silences, pre-take chatter, A/V sync, mic mix, captions, intro) | sesh-edit | `cd longform && uv run sesh-edit <in> -o <out>.edited.mp4 --review` first, show the plan, then the same without `--review` | `<out>.edited.mp4`, `.srt`, `.decisions.json`, `.clean.mp4` |
 | Fix captions or a misheard word | sesh-edit | `cd longform && uv run sesh-edit <in> -o <out>.edited.mp4 --replace Waterhose=Waterhouse` (cached, ~40 s). Or edit the decisions file and use `--from-decisions` | overwrites the edit |
@@ -341,13 +341,13 @@ src/SessionPoster*.tsx   posters (src/poster/: mark, grain)
 src/bumper/              SessionBumper stingers (one file per idea; timing constants at the top)
 src/ident/               idents incl. Fuse, the Sessions intro (ids.ts = catalogue, Idents.tsx = Studio registrations, */gen-audio.py = soundtrack + motion generators, run with uv)
 src/session/             Tuesday session plan (plan.ts) + session graphics: LogoReveal (SessionOpen/Close), WhMark, Captions, theme
-src/reel/                SessionReel (9:16 reel), ReelCaptions, theme (crop boxes per speaker), data/*.reel.json
+src/reel/                SessionReel (9:16 reel: Fuse-Drums intro, clip, YouTube outro), outro/ (ReelOutro-YouTube), ReelCaptions, crop.ts, theme, data/example.*
 src/fort-riddim/         FORT RIDDIM promo, showcase and reel (one-off, Manuel)
 src/audience/            metrics + schemas for recap and board (tests: bun run test)
 scripts/render-*.ts      one render script per video
 scripts/make-poster.ts, sync-covers.ts, cutout.swift   posters
 scripts/template-media.ts, private-media.ts            which public/ files templates use; the private list (#50)
-scripts/reel/make-reel.ts                              reel cut + render
+scripts/reel/make-reel.ts, sesh.ts, find-words.ts, stills.ts   reel from a sesh-edit episode: cut + render + master, word mapping, quote finder, crop stills
 longform/                sesh-edit (Python, uv): the long-form editor; its README is the reference
 out/, work/              renders and intermediates (gitignored)
 ```
@@ -396,27 +396,36 @@ episode's intro is now sesh-edit's job.
 
 ## Reels from an edited interview
 
-`SessionReel` crops a wide two-shot to 9:16, cuts between the speakers and
-lays karaoke captions on. `scripts/reel/make-reel.ts` builds it from a reel
-definition (`src/reel/data/<slug>.reel.json`):
+`SessionReel` (`src/reel/`) turns a finished sesh-edit interview into a 20–30 s
+Instagram reel: Fuse-Drums 9:16 in front (the clip opens under its rings at frame
+118, like the 16:9 intro), the clip cropped to 9:16 and cut between the speakers,
+karaoke captions, the YouTube end bumper (`ReelOutro-YouTube`, "WITH <ARTIST>" from the definition's `artist`), mastered to −14 LUFS / −1 dBTP, h264 + aac,
+`+faststart`. `scripts/reel/make-reel.ts` builds it from a reel definition. The
+full walk-through is `longform/README.md`, "A reel from an episode". In short:
 
-- `source`: a cut episode **without** burned-in captions. From sesh-edit that
-  is `<name>.clean.mp4`.
-- `captions`: a JSON array of words `{t, d, w, br}` (start s, duration s,
-  text, line break after) timed to `source`.
-- `segments`: the spans to use, in `source` time, each with a `shot` from
-  `src/reel/theme.ts` (crop boxes per speaker; add one for a new room
-  layout).
+1. **Inputs:** the episode's clean cut (`<name>.clean.mp4`, or an upscale like
+   `<name>.clean.x4plus1080p.mp4`) and its `<name>.decisions.json`. No clean cut
+   on disk? Rebuild it from the decisions without re-editing (README recipe).
+2. **Spans** are in clean-cut seconds. To turn a quote or an edit time into one:
+   `bun scripts/reel/find-words.ts <name>.decisions.json "the quoted words" --near 12:34`
+   (`--near` is edit/.srt time; edit time = clean time + the intro offset, ~3.93 s).
+3. **Crops** (`shots`) are per episode, in source pixels, 9:16:
+   `bun scripts/reel/stills.ts <name>.reel.json` writes gridded stills with the crops
+   drawn on (to `work/reel-stills/`). A span with no `shot` gets the centre crop.
+4. Write `<name>.reel.json` **next to the episode's outputs** (e.g.
+   `sesh-out/reel/`): it quotes the interview, so never in the repo (`*.reel.json`
+   is gitignored and a test checks). The shape is `src/reel/data/example.reel.json`.
+5. `bun run reel <name>.reel.json` → `<slug>.reel.mp4` next to it. `--reuse-cut`
+   re-renders without re-cutting; `--cut-only` stops before the render and prints
+   the props file to preview in Studio (`bun run dev -- --props=<file>`).
 
-The two checked-in reels were made from the retired TypeScript cut, whose
-`work/<slug>/master.mp4` and `captions.json` stay on the machine that made
-them. **sesh-edit doesn't write the `captions` file yet.** Its word timings are
-in `<name>.work/transcript.json` (input time) and the cut map is
-`keep_segments` in `<name>.decisions.json`; converting them is a small
-script that hasn't been written. Until then, do it by hand for the user and
-say so. The composition itself, and the checked-in `current.json`, keep
-working: on a machine without `public/reel/<slug>-cut.mp4` it shows the
-missing-media card.
+The words come from the decisions file (`caption_words`, mapped onto the clean cut
+exactly as sesh-edit places its captions; `scripts/reel/sesh.ts`), so nothing is
+re-transcribed. The bumper's sound is pre-gained against the master's gain so it
+lands at its own level; `"outro": "card"` brings back the old end card. The two
+checked-in reels (`fro-ministry`,
+`boogie-exit`) are from the retired TypeScript cut and still build on the machine
+that has their `work/` files.
 
 ## sesh-edit (`longform/`)
 

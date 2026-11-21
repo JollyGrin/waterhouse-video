@@ -857,6 +857,6 @@ const FuseView: React.FC<{ L: Layout; src?: string; volume?: number }> = ({ L, s
 export const Fuse: React.FC = () => <FuseView L={PORTRAIT} />;
 /** 1920×1080 (stream / YouTube). Same timeline and soundtrack. */
 export const FuseWide: React.FC = () => <FuseView L={LANDSCAPE} />;
-/** Fuse-Drums, 1080×1920 and 1920×1080: Fuse's picture on the drum track. */
-export const FuseDrums: React.FC = () => <FuseView L={PORTRAIT} src={FUSE_DRUMS_AUDIO} volume={1} />;
+/** Fuse-Drums, 1080×1920 and 1920×1080: Fuse's picture on the drum track. `volume` lets a reel match it to its clip (#55). */
+export const FuseDrums: React.FC<{ volume?: number }> = ({ volume = 1 }) => <FuseView L={PORTRAIT} src={FUSE_DRUMS_AUDIO} volume={volume} />;
 export const FuseDrumsWide: React.FC = () => <FuseView L={LANDSCAPE} src={FUSE_DRUMS_AUDIO} volume={1} />;

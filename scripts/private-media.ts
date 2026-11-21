@@ -42,7 +42,7 @@ export const PRIVATE_MEDIA: PrivateMedia[] = [
   {
     path: "reel/",
     why: "footage: the cut interview a reel plays (SessionReel)",
-    from: "`bun run reel src/reel/data/<slug>.reel.json` writes it from a cut episode",
+    from: "`bun run reel <name>.reel.json` writes it from a sesh-edit clean cut (longform/README.md, \"A reel from an episode\")",
   },
   {
     path: "fort-riddim/",

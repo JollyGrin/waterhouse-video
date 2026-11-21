@@ -34,6 +34,8 @@ export type YouTubeOutroProps = {
   line: string;
   /** The guest; shows as "WITH <ARTIST>" under the rule. Empty (the default) hides the line; the reel pipeline passes it. */
   artist?: string;
+  /** Gain on its sound; the reel pipeline sets it so the tail lands at its designed level after mastering (#55). */
+  volume?: number;
 };
 
 // ---- timeline (frames) ----
@@ -201,9 +203,9 @@ const Glass: React.FC<{ f: number }> = ({ f }) => {
   );
 };
 
-export const YouTubeOutro: React.FC<Partial<YouTubeOutroProps>> = ({ handle = YOUTUBE_OUTRO_DEFAULTS.handle, line = YOUTUBE_OUTRO_DEFAULTS.line, artist }) => {
+export const YouTubeOutro: React.FC<Partial<YouTubeOutroProps>> = ({ handle = YOUTUBE_OUTRO_DEFAULTS.handle, line = YOUTUBE_OUTRO_DEFAULTS.line, artist, volume = 1 }) => {
   const f = useCurrentFrame();
-  const audio = <Audio src={staticFile(YOUTUBE_OUTRO_AUDIO)} />;
+  const audio = <Audio src={staticFile(YOUTUBE_OUTRO_AUDIO)} volume={volume} />;
   if (f >= T.dot[1]) return <AbsoluteFill style={{ backgroundColor: "#000" }}>{audio}</AbsoluteFill>;
 
   // the handle block, centred on the scope's line
