@@ -141,7 +141,7 @@ graphics in sesh-edit.
 | Fix captions or a misheard word | sesh-edit | `cd longform && uv run sesh-edit <in> -o <out>.edited.mp4 --replace Waterhose=Waterhouse` (cached, ~40 s). Or edit the decisions file and use `--from-decisions` | overwrites the edit |
 | Manual cut, move the intro to the front, insert a clip, title card | sesh-edit | `--cut 20:03-20:29`, `--move-to-front`, `--insert-clip`, `--title-card` (times from the input file) | |
 | Make the 1080p version | sesh-edit | `uv run sesh-upscale <out>.clean.mp4 -o <out>.clean.1080p.mp4 --method lanczos` (laptop, minutes) or `--method x4plus` (GPU box, hours), then `uv run sesh-overlay <out>.decisions.json <out>.clean.1080p.mp4 -o <out>.edited.1080p.mp4` | `<out>.edited.1080p.mp4` |
-| Change the intro itself (Fuse-Drums) | Remotion `IdentFuse-Drums-16x9` | Edit `src/ident/Fuse.tsx` (picture) or `src/ident/fusedrums/gen-audio.py` (drum track; re-run it with `uv run`), preview in Studio, then `bun run render:intro`: renders it into `longform/src/sesh_edit/assets/intro/` (gitignored). If the frame where the rings open moves from 118, update `OPEN_FRAME` in `scripts/render-intro.ts` | `fuse-16x9.{webm,flac,json}` |
+| Change the intro itself (Fuse-Drums) | Remotion `IdentFuse-Drums-16x9` | Edit `src/ident/Fuse.tsx` (picture) or the committed drum track `public/ident/audio/fusedrums/mix.wav` (a cut of Denzo's brother's track; `src/ident/fusedrums/gen-audio.py` re-cuts it from the song), preview in Studio, then `bun run render:intro`: renders it into `longform/src/sesh_edit/assets/intro/` (gitignored). If the frame where the rings open moves from 118, update `OPEN_FRAME` in `scripts/render-intro.ts` | `fuse-16x9.{webm,flac,json}` |
 | Add or change the intro on an edited video | sesh-edit | Default intro is Fuse-Drums, built by `bun run render:intro` (run it once before the first edit; sesh-edit says so if it's missing). `--intro FILE` for another alpha video, `--no-intro` for none. A new ident is made in Remotion first; see [Hand-off](#hand-off-remotion--sesh-edit) | |
 | Session logo reveal (masked open/close) | Remotion `SessionOpen` / `SessionClose` | Needs `public/session/head.mp4` / `tail.mp4`; see [Session logo reveal](#session-logo-reveal) | |
 | Change an animation's text, timing or colours | Remotion | Edit the composition in `src/`; the user previews in `bunx remotion studio` | |
@@ -307,11 +307,11 @@ run end to end yet: that needs a real edit with the models downloaded.)
 3. `cd longform && uv run sesh-edit <in> -o <out>.edited.mp4 --intro ../out/Bumper-door.mov`.
    sesh-overlay reuses that intro for the 1080p version.
 
-The default intro, **Fuse-Drums** (Fuse's picture on our own drum track), is
+The default intro, **Fuse-Drums** (Fuse's picture on a drum track by Denzo's brother), is
 built into sesh-edit's asset folder
 (`longform/src/sesh_edit/assets/intro/fuse-16x9.{webm,flac,json}`, gitignored)
 by `bun run render:intro`, from the Remotion comp `IdentFuse-Drums-16x9`
-(`src/ident/Fuse.tsx`, sound from `src/ident/fusedrums/gen-audio.py`). Run it
+(`src/ident/Fuse.tsx`, sound `public/ident/audio/fusedrums/mix.wav`). Run it
 once on a fresh clone before the first edit, and again after changing either. See the "Intro" section of
 `longform/README.md` for how the audio is levelled and captions held back.
 

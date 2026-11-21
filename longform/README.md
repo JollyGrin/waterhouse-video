@@ -94,8 +94,8 @@ followed by a title card also dips to black. Captions never run over an insert.
 
 ## Intro
 
-`<name>.edited.mp4` and `<name>.edited.1080p.mp4` open with **Fuse-Drums** (Fuse's picture on our
-own drum track), the Waterhouse Sessions ident (5 s, with alpha). The interview starts playing underneath at 3.933 s (Fuse frame 118),
+`<name>.edited.mp4` and `<name>.edited.1080p.mp4` open with **Fuse-Drums** (Fuse's picture on a
+drum track by Denzo's brother), the Waterhouse Sessions ident (5 s, with alpha). The interview starts playing underneath at 3.933 s (Fuse frame 118),
 when the ident's rings open onto it, so the output is 3.933 s + the edit. `<name>.clean.mp4`
 never gets the intro: it stays the upscale input, and `sesh-overlay` adds the intro at 1080p.
 
@@ -117,12 +117,12 @@ never gets the intro: it stays the upscale input, and `sesh-overlay` adds the in
 
 Asset: `src/sesh_edit/assets/intro/fuse-16x9.{webm,flac,json}` is built, not committed:
 `bun run render:intro` at the repo root renders the Remotion comp `IdentFuse-Drums-16x9`
-(`src/ident/Fuse.tsx`: Fuse's picture on the drum track from `src/ident/fusedrums/gen-audio.py`)
+(`src/ident/Fuse.tsx`: Fuse's picture on `public/ident/audio/fusedrums/mix.wav`)
 to ProRes 4444, then
 `ffmpeg -i IdentFuse-Drums-16x9.mov -an -c:v libvpx-vp9 -pix_fmt yuva420p -crf 30 -b:v 0 -auto-alt-ref 0 fuse-16x9.webm`
 (no colour flags: the master's tags pass through untouched),
 `ffmpeg -i IdentFuse-Drums-16x9.mov -vn -c:a flac fuse-16x9.flac`, and writes `fuse-16x9.json` with
-`open_s` = frame 118 / 30. To change the intro, edit the Fuse comp or the drum generator and re-run `render:intro`.
+`open_s` = frame 118 / 30. To change the intro, edit the Fuse comp or its drum track and re-run `render:intro`.
 The wheel bundles the files through hatch `artifacts` (pyproject.toml). ffmpeg only decodes
 VP9 alpha with `-c:v libvpx-vp9` before `-i` (the code does this).
 

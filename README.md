@@ -39,7 +39,7 @@ people use for it in [TEMPLATES.md](TEMPLATES.md).
 
 Idents are **made** in Remotion and **composited** by sesh-edit: Fuse
 (`src/ident/Fuse.tsx`) is the Sessions intro, and `bun run render:intro`
-builds its Fuse-Drums cut (the same picture on our own drum track) into sesh-edit. Details: AGENTS.md, "Hand-off".
+builds its Fuse-Drums cut (the same picture on a drum track by Denzo's brother) into sesh-edit. Details: AGENTS.md, "Hand-off".
 
 ## Quick commands (developers)
 
@@ -395,7 +395,7 @@ redrawn beam. The other 24 are the prototype's other ideas, kept as stock.
 | Idea | Comp ids | What it is |
 | --- | --- | --- |
 | Fuse | `IdentFuse`, `IdentFuse-16x9` | **the Sessions intro** (5 s) |
-| Fuse-Drums | `IdentFuse-Drums`, `IdentFuse-Drums-16x9` | Fuse's picture on our own synthesised drum track, the big hit on the lock (f55): **the cut sesh-edit puts on edits** (`fusedrums/gen-audio.py`) |
+| Fuse-Drums | `IdentFuse-Drums`, `IdentFuse-Drums-16x9` | Fuse's picture on a 5 s cut of a track by Denzo's brother (used with permission), the big hit on the lock (f55): **the cut sesh-edit puts on edits** (`public/ident/audio/fusedrums/mix.wav`, committed; `fusedrums/gen-audio.py` re-cuts it from the song) |
 | FuseLines-Ink | `IdentFuseLines-Ink`, `IdentFuseLines-Ink-16x9` | Fuse with the beam as an ink line after the Waterhouse Radio poster, Denzo 4 semitones lower |
 | FuseLines-Wave | `IdentFuseLines-Wave`, `IdentFuseLines-Wave-16x9` | the ink line with wave echoes, Denzo 7 semitones lower |
 | FuseLines-Draft | `IdentFuseLines-Draft`, `IdentFuseLines-Draft-16x9` | the ink line as a draughtsman's drawing, Denzo 12 semitones lower |
@@ -455,7 +455,7 @@ If the frame where the rings open moves, update `OPEN_FRAME` in
 `scripts/render-intro.ts`. `--reuse` skips the render if the `.mov` exists.
 
 **Sound and timing.** Each soundtrack is synthesised by a Python generator
-next to the code. The generator also writes the motion data the picture
+next to the code (except Fuse-Drums, a committed cut of a real track; see below). The generator also writes the motion data the picture
 reads. Both outputs are committed. After any timing change, re-run the
 generator so picture and sound stay locked:
 
@@ -475,6 +475,9 @@ the system Python. The scratch voice is `src/ident/scratchkit/denzo-waterhouse.w
 Denzo saying "Waterhouse", cut from the published Sessions video (YouTube
 mWNWTIGghjc). Ident-owned media lives in `public/ident/`. `public/audio/` stays
 for the other videos' sounds.
+
+**Credit.** Fuse-Drums soundtrack: a 5 s cut of a track by Denzo's brother, used with permission.
+TODO(Dean): his artist name and link.
 
 ### Just the numbers
 

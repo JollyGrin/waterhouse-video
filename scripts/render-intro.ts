@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Build the intro sesh-edit prepends to edited Sessions videos (Fuse-Drums 16:9: Fuse's picture on
- * our own drum track, #38, #51).
+ * a drum track by Denzo's brother, #38, #51).
  *
  *   bun run render:intro            # render Fuse-Drums, then write the three files below
  *   bun run render:intro --reuse    # skip the Remotion render if out/ident/IdentFuse-Drums-16x9.mov exists

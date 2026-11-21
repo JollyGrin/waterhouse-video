@@ -1,4 +1,4 @@
-"""The channel ident (default: Fuse-Drums, Fuse's picture on our own drum track) prepended to the captioned outputs.
+"""The channel ident (default: Fuse-Drums, Fuse's picture on a drum track by Denzo's brother) prepended to the captioned outputs.
 
 The ident has an alpha channel and is built to open onto the interview: the interview starts
 playing underneath at `open_s` (Fuse: frame 118 = 3.933s) and the ident's alpha composites
@@ -32,7 +32,7 @@ TP_CEILING = -1.0
 REMATCH_LU = 0.5
 
 
-MISSING_HINT = ("The bundled Fuse-Drums intro (Fuse's picture on our own drum track) isn't built yet. From the repo root run: bun run render:intro\n"
+MISSING_HINT = ("The bundled Fuse-Drums intro (Fuse's picture on a drum track by Denzo's brother) isn't built yet. From the repo root run: bun run render:intro\n"
                 "(it renders Fuse-Drums in Remotion into {dir}). Or pass --no-intro to edit without it.")
 
 

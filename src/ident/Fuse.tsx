@@ -790,8 +790,9 @@ const MaskFrame: React.FC<{ mask: string; weave: [number, number]; steady: boole
 /** Fuse's own soundtrack (Splice's "turn" cut). Variants swap it, see FUSE_DRUMS_AUDIO. */
 const FUSE_AUDIO = "ident/audio/turn/mix.wav";
 /**
- * Fuse-Drums: the same picture on our own synthesised drum track, its big hit on the f55 lock. Committed;
- * regenerate with `uv run src/ident/fusedrums/gen-audio.py`. The Sessions intro sesh-edit uses (render:intro).
+ * Fuse-Drums: the same picture on a 5 s cut of a track by Denzo's brother (used with permission), its big
+ * hit on the f55 lock. The committed wav is the source of truth (src/ident/fusedrums/gen-audio.py re-cuts
+ * it from the song). The Sessions intro sesh-edit uses (render:intro).
  */
 export const FUSE_DRUMS_AUDIO = "ident/audio/fusedrums/mix.wav";
 

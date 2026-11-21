@@ -4,8 +4,8 @@ own resolution (typically the 1080p output of sesh-upscale).
     sesh-overlay session.decisions.json session.clean.1080p.mp4 -o session.edited.1080p.mp4
 
 The video must be the clean cut of the same decisions (frame n = output frame n), at any
-resolution. The intro recorded in the decisions (default: Fuse-Drums, Fuse's picture on our own
-drum track) is prepended, its soundtrack mixed over the start of the clean cut's audio at the gain
+resolution. The intro recorded in the decisions (default: Fuse-Drums, Fuse's picture on a drum
+track by Denzo's brother) is prepended, its soundtrack mixed over the start of the clean cut's audio at the gain
 sesh-edit used (matched again if the intro has changed since, see intro.REMATCH_LU); with no
 intro the audio is copied through untouched."""
 from __future__ import annotations
