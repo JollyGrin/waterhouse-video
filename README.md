@@ -477,6 +477,35 @@ Denzo saying "Waterhouse", cut from the published Sessions video (YouTube
 mWNWTIGghjc). Ident-owned media lives in `public/ident/`. `public/audio/` stays
 for the other videos' sounds.
 
+### ReelOutro-YouTube (the reel's end bumper)
+
+`src/reel/outro/YouTubeOutro.tsx`, 1080×1920, 3.8 s (`YOUTUBE_OUTRO_FRAMES` =
+114). It goes on the end of a Sessions reel and sends people to the full
+interview: Fuse's scope, switched off. The trace carries the last of the
+clip's signal and goes flat; the flat line opens into the handle the way a
+tube comes on; on the hit the outline gives way to print (the line types in
+above it, the yellow rule and "WITH <guest>" land below); then the set is
+switched off: the type collapses into the line, the line into a dot, the dot
+goes. Black on the last frame, so a looping reel cuts cleanly back to its
+first frame. The handle and line stay inside x 120–960 and y 780–1130, clear
+of Instagram's caption block and right-hand rail (`src/reel/theme.ts`).
+
+Props: `{ handle, line, artist? }`, default `@Waterhouse_Studios` / "Full
+interview on YouTube". The handle is set upper-case in Rubik Mono One; one
+longer than the column breaks after its `_`/`.`/`-` (`src/reel/outro/layout.ts`).
+
+```sh
+bunx remotion render ReelOutro-YouTube out/reel-outro.mp4
+bunx remotion render ReelOutro-YouTube out/reel-outro.mp4 --props '{"artist":"Name"}'
+```
+
+Sound: `public/audio/reel-outro/youtube-tail.wav` (mono, 44.1 kHz, true peak
+−1.5 dBTP), made by `uv run src/reel/outro/gen-audio.py`: mains hum and a
+little static under the trace, the one hit cut from "hu" (the Fuse-Drums
+track, `public/ident/audio/fusedrums/mix.wav`) on the lock, sparse vinyl
+crackle and a run-out tick through the hold, a low thump as it switches off,
+a thin falling pip for the dot, silence from the last frames.
+
 ### Just the numbers
 
 ```
