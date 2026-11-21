@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["numpy"]
+# dependencies = ["numpy==2.5.5"]  # pinned: a newer FFT could change the last bit of samples
 # ///
 # FUSE-DRUMS: Fuse's picture on its own drum track, synthesised here (no samples, nothing third-party),
 # so it can be committed and published. Deterministic (fixed seed): re-running writes the same file.

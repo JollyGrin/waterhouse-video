@@ -229,7 +229,7 @@ So everyone's work looks like it comes from the same place:
 - **Branch, save and back up as you go, PR; never `main`.** See [Hard rules](#hard-rules-read-before-touching-anything).
   Stage files by name, never `git add -A`. Commit messages: a short line saying what changed, e.g. `neon stinger: shorter hold`.
 - Before a PR: `bun run lint` (eslint + tsc) and `bun run test` (it lists the root test files so `longform/` is never picked up); `bunx remotion
-  compositions` must list everything. `longform/` has no test suite yet:
+  compositions` must list everything. In `longform/`: `uv run pytest` (a small suite in `longform/tests/`), and
   check that `uv run sesh-edit --help` still runs.
 - Non-developer users: see [Talking to the team](#talking-to-the-team).
 

@@ -1,4 +1,4 @@
-"""The channel ident (default: Fuse) prepended to the captioned outputs.
+"""The channel ident (default: Fuse-Drums, Fuse's picture on our own drum track) prepended to the captioned outputs.
 
 The ident has an alpha channel and is built to open onto the interview: the interview starts
 playing underneath at `open_s` (Fuse: frame 118 = 3.933s) and the ident's alpha composites
@@ -27,10 +27,13 @@ import numpy as np
 ASSET_DIR = Path(__file__).parent / "assets" / "intro"
 DEFAULT_FILE = "fuse-16x9.webm"
 TP_CEILING = -1.0
+# A recorded gain_db is reused only while the intro still measures within this of the recorded
+# intro_lufs. More means the intro changed since the edit (Fuse -> Fuse-Drums kept the file name).
+REMATCH_LU = 0.5
 
 
-MISSING_HINT = ("The bundled Fuse intro isn't built yet. From the repo root run: bun run render:intro\n"
-                "(it renders Fuse in Remotion into {dir}). Or pass --no-intro to edit without it.")
+MISSING_HINT = ("The bundled Fuse-Drums intro (Fuse's picture on our own drum track) isn't built yet. From the repo root run: bun run render:intro\n"
+                "(it renders Fuse-Drums in Remotion into {dir}). Or pass --no-intro to edit without it.")
 
 
 def resolve(file: str) -> Path:
@@ -123,10 +126,12 @@ def loudness(a: np.ndarray, sr: int) -> dict:
 
 
 def mix_audio(body: np.ndarray, sr: int, spec: dict, fps: float, speech_lufs: float | None = None,
-              gain_db: float | None = None) -> tuple[np.ndarray, dict]:
+              gain_db: float | None = None, recorded_lufs: float | None = None) -> tuple[np.ndarray, dict]:
     """Intro soundtrack + body (delayed by the intro offset). `gain_db` (e.g. recorded in
     decisions.json) skips the level matching; otherwise the intro is matched to
-    `speech_lufs` (measured on `body` if not given)."""
+    `speech_lufs` (measured on `body` if not given). With `recorded_lufs` (the intro loudness
+    the gain was worked out for), a stored gain is dropped and the level matched again when
+    the intro now measures more than REMATCH_LU away: the intro was rebuilt since the edit."""
     off = offset_frames(spec, fps)
     n_off = int(round(off / fps * sr))
     ia = load_audio(spec, sr, body.shape[1])
@@ -137,6 +142,9 @@ def mix_audio(body: np.ndarray, sr: int, spec: dict, fps: float, speech_lufs: fl
         info["audio"] = None
         return out, info
     m = loudness(ia, sr)
+    if gain_db is not None and recorded_lufs is not None and abs(m["i"] - recorded_lufs) > REMATCH_LU:
+        info |= {"rematched": True, "stale_gain_db": gain_db, "recorded_intro_lufs": round(recorded_lufs, 2)}
+        gain_db = None
     if gain_db is None:
         if speech_lufs is None:
             speech_lufs = loudness(body, sr)["i"]
