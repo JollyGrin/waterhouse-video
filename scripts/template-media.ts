@@ -5,14 +5,20 @@
  * the media a template needs is committed. This reads the source under src/
  * (no rendering) and finds every public/ path it can see:
  *
- *  - string literals that end in a media extension ("ident/audio/x/mix.wav"),
- *    including partial ones a helper completes (Press: sfx("recap/tick.wav"));
+ *  - string literals that look like a path and end in a media extension
+ *    ("ident/audio/x/Kick 01.wav"; a leading "/" or "./" is dropped). A bare
+ *    file name ("cover.png") only counts as the argument of staticFile(), so a
+ *    default file name elsewhere can't fail the check. Partial paths a helper
+ *    completes count too (Press: sfx("recap/tick.wav"));
  *  - calls to one-argument-to-path helpers such as
  *    `const sfx = (name: string) => staticFile(\`audio/pullup/${name}.wav\`)`,
  *    resolved for every literal argument (sfx("click") → audio/pullup/click.wav);
  *  - template paths with a variable part (`.../mix-${semitones}.wav`, and each
  *    helper's own template): at least one tracked or private file must match,
- *    which catches a template whose whole folder was never committed.
+ *    which catches a template whose whole folder was never committed. This is
+ *    a weak check: a new sound added to a kit that already has tracked files
+ *    passes even if it isn't committed, and so do calls to helpers written as
+ *    `function sfx(...)` rather than an arrow `const`.
  *
  * Run it to see the list: `bun scripts/template-media.ts`.
  */
@@ -21,7 +27,10 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { isPrivate, PRIVATE_MEDIA, type PrivateMedia } from "./private-media";
 
-/** The size rule: per file, and per folder (one template's media lives in its own folder). */
+/**
+ * The size rule: per file, and per folder (one template's media lives in its own
+ * folder). The folder limit counts the files directly in it, not its subfolders.
+ */
 export const MAX_FILE_BYTES = 4 * 1024 * 1024;
 export const MAX_FOLDER_BYTES = 10 * 1024 * 1024;
 
@@ -177,9 +186,22 @@ function findHelpers(code: string): Helper[] {
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** A string that looks like a path under public/ (not a URL, import or bare extension). */
-const looksLikePublicPath = (s: string) =>
-  MEDIA_EXT.test(s) && /^[A-Za-z0-9_]/.test(s) && !/^[a-z]+:/i.test(s) && !/\s/.test(s) && !s.startsWith("public/");
+/** "/audio/x.wav" and "./audio/x.wav" mean public/audio/x.wav to staticFile(). */
+const normalise = (s: string) => s.replace(/^\.?\//, "");
+
+/**
+ * A string that looks like a path under public/: has a folder, ends in a media
+ * extension, isn't a URL, a relative import ("../x.wav") or a "public/..." note.
+ * Spaces are fine ("audio/neon/Kick 01.wav"). `bare` allows a file name without
+ * a folder, for the argument of staticFile() itself.
+ */
+const looksLikePublicPath = (s: string, bare = false) =>
+  MEDIA_EXT.test(s) &&
+  (bare || s.includes("/")) &&
+  /^[A-Za-z0-9_]/.test(s) &&
+  !/^[a-z]+:/i.test(s) &&
+  !/[\n\t]/.test(s) &&
+  !s.startsWith("public/");
 
 /** Every public/ path the source files use. */
 export function findMediaRefs(files: SourceFile[]): MediaRef[] {
@@ -212,8 +234,12 @@ export function findMediaRefs(files: SourceFile[]): MediaRef[] {
 
     // Literal paths, completed by this file's helper prefixes when partial.
     for (const lit of literals(code)) {
-      if (!looksLikePublicPath(lit.value)) continue;
-      refs.push({ at: at(lit.index), candidates: [lit.value, ...prefixes.map((p) => p + lit.value)] });
+      const before = code.slice(Math.max(0, lit.index - 30), lit.index);
+      if (lit.value.startsWith("../") || /(\bfrom|\bimport\s*\(|\brequire\s*\()\s*$/.test(before)) continue; // an import
+      const value = normalise(lit.value);
+      const inStaticFile = /staticFile\(\s*$/.test(before);
+      if (!looksLikePublicPath(value, inStaticFile)) continue;
+      refs.push({ at: at(lit.index), candidates: [value, ...prefixes.map((p) => p + value)] });
     }
 
     // Template paths with a variable part, e.g. `ident/audio/fuselines/mix-${semitones}.wav`.
@@ -263,7 +289,7 @@ export function checkTracked(sizes: Map<string, number>, list: PrivateMedia[] = 
   }
   for (const [folder, bytes] of folders)
     if (bytes > MAX_FOLDER_BYTES)
-      problems.push({ at: folder, path: folder, message: `${mb(bytes)} of media is over the ${mb(MAX_FOLDER_BYTES)} per-folder limit` });
+      problems.push({ at: folder, path: folder, message: `${mb(bytes)} of media is over the ${mb(MAX_FOLDER_BYTES)} per-folder limit (subfolders not counted)` });
   return problems;
 }
 

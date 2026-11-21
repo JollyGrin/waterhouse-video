@@ -30,6 +30,11 @@ export const PRIVATE_MEDIA: PrivateMedia[] = [
     from: "`bun scripts/pick-track.ts` copies a track from the music library folder (ask Dean) into it",
   },
   {
+    path: "audio/fuse-drums/",
+    why: "third-party song, old Fuse-Drums test (#49), replaced by ident/audio/fusedrums/ (#51)",
+    from: "nowhere any more: delete it if it is on your computer; Fuse-Drums uses our own drum track",
+  },
+  {
     path: "session/",
     why: "footage: the first and last 5 seconds of an edited interview (SessionOpen / SessionClose)",
     from: "cut from a finished sesh-edit episode with ffmpeg; AGENTS.md \"Session logo reveal\" has the two commands",

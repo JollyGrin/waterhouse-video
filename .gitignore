@@ -12,8 +12,15 @@ build
 # or large; scripts/private-media.ts lists it with where it comes from.
 # Copyrighted music (the weekly lineup beds) and local test audio:
 public/audio/private/
-# loose tracks the old pick-track left directly in public/audio/
+# loose tracks left directly in public/audio/ (the old pick-track, test songs)
 public/audio/*.mp3
+public/audio/*.wav
+public/audio/*.flac
+public/audio/*.aif*
+public/audio/*.m4a
+# Fuse-Drums' first test cut of a third-party song (#49), replaced by our own
+# drum track in public/ident/audio/fusedrums/ (#51)
+public/audio/fuse-drums/
 
 # Working files for the session video edit (large intermediates)
 work/

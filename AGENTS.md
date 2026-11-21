@@ -214,10 +214,11 @@ When you make or change a template:
   YouTube intro on someone else's song gets copyright claims. If the user
   wants a song in a template, say so in plain words and offer to make an
   original sound instead (a drum hit, a hum, a riser).
-- **Is it small?** At most **4 MB per file** and **10 MB per folder**.
-  Cut audio to the seconds the template plays; use mono unless the stereo
-  is the point; size pictures to the frame (at most 1920 px on the long
-  side, JPEG for photos, PNG only for flat graphics or transparency). With
+- **Is it small?** At most **4 MB per file** and **10 MB per folder**, not
+  counting subfolders. Cut audio to the seconds the template plays; use
+  mono unless the stereo is the point; size pictures to the frame (at
+  most 1920 px on the long side, JPEG for photos, PNG only for flat
+  graphics or transparency). With
   ffmpeg, e.g. `ffmpeg -i in.wav -ss 62.4 -t 5 -ac 1 -ar 48000 out.wav` or
   `ffmpeg -i in.png -vf scale=1920:-1 out.jpg`.
 - **Check it:** `bun scripts/template-media.ts` lists every file under

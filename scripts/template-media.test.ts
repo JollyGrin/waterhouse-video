@@ -58,18 +58,39 @@ describe("findMediaRefs", () => {
     expect(refs).not.toContain("audio/house.wav");
   });
 
+  it("finds paths with spaces and a leading / or ./", () => {
+    expect(
+      paths({
+        "src/N.tsx": [
+          `staticFile("audio/neon/Kick 01.wav");`,
+          `staticFile("/audio/neon/snare.wav");`,
+          `staticFile("./audio/neon/hat.wav");`,
+          `import tick from "./sounds/tick.wav";`,
+        ].join("\n"),
+      }),
+    ).toEqual(["audio/neon/Kick 01.wav", "audio/neon/snare.wav", "audio/neon/hat.wav"]);
+  });
+
+  it("only counts a bare file name as the argument of staticFile()", () => {
+    expect(
+      paths({
+        "src/P.tsx": `const defaults = { fileName: "cover.png" };\n<Img src={staticFile("logo.svg")} />`,
+      }),
+    ).toEqual(["logo.svg"]);
+  });
+
   it("strips comments without touching strings that contain //", () => {
     expect(stripComments(`a = "x//y"; // gone\nb`)).toBe(`a = "x//y";        \nb`);
   });
 });
 
 describe("checkRefs", () => {
-  it("flags a template's media that is on disk but not in git (the Fuse-Drums case)", () => {
+  it("flags a template's media that is on disk but not in git (the case that hit Fuse-Drums)", () => {
     const fuse = {
-      "src/ident/Fuse.tsx": `export const FUSE_DRUMS_AUDIO = "audio/fuse-drums/mix.wav";\nconst A = "ident/audio/splice/mix.wav";`,
+      "src/ident/Fuse.tsx": `export const DRUMS_AUDIO = "audio/drums/mix.wav";\nconst A = "ident/audio/splice/mix.wav";`,
     };
-    expect(problems(fuse, ["public/ident/audio/splice/mix.wav"])).toEqual(["public/audio/fuse-drums/mix.wav"]);
-    expect(problems(fuse, ["public/ident/audio/splice/mix.wav", "public/audio/fuse-drums/mix.wav"])).toEqual([]);
+    expect(problems(fuse, ["public/ident/audio/splice/mix.wav"])).toEqual(["public/audio/drums/mix.wav"]);
+    expect(problems(fuse, ["public/ident/audio/splice/mix.wav", "public/audio/drums/mix.wav"])).toEqual([]);
   });
 
   it("accepts a partial path a helper completes", () => {
