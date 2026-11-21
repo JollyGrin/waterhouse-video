@@ -41,6 +41,9 @@ __pycache__/
 batch*.json
 *.batch.json
 *.status.json
+*.status.json.wlock
+batch*.lock
+*.batch.lock
 *.part
 *.srt
 *.decisions.json

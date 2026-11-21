@@ -246,9 +246,8 @@ uv run sesh-batch $m --status                 # where every job is
 | `url` | required | Dropbox share link (`dl=0` becomes `dl=1`, `rlkey=` is kept), any http(s) link, or a local path |
 | `args` | `[]` | extra `sesh-edit` flags: `--cut`, `--replace`, `--move-to-front`, `--title-card`, `--av-offset`, ... |
 | `approved` | false | render without stopping for review |
-| `upscale` | off | `true`/`"x4plus"` or `"lanczos"`: after the preview, make a comparison sample and stop |
-| `upscale_approved` | false | skip the stop after the sample |
-| `sample_start` / `sample_duration` | 25% in / 25 s | where the sample comes from (clean-cut time). x4plus takes ~1 s per frame on the 3070, so 25 s is ~10 min |
+| `upscale` | off | `true`/`"x4plus"` or `"lanczos"`: after the preview, make a comparison sample and stop. The full upscale only starts after `--approve-upscale NAME`; there is no manifest key to skip that stop |
+| `sample_start` / `sample_duration` | 25% in / 25 s | where the sample comes from, in clean-cut time: seconds or `"mm:ss"`. x4plus takes ~1 s per frame on the 3070, so 25 s is ~10 min |
 
 Top-level `in_dir` / `out_dir` override `~\Videos\sesh-in` / `~\Videos\sesh-out`
 (`~/Movies/waterhouse/in` / `out` on a Mac).
@@ -267,13 +266,21 @@ What each job writes into `out_dir`:
 State is in `<manifest>.status.json` beside the manifest: `queued`, `downloading`, `planning`,
 `awaiting-review`, `rendering`, `previewing`, `upscale-sample`, `awaiting-upscale-approval`,
 `upscaling`, `done` or `failed` (with the error). Re-running the manifest skips finished
-work: a download that is there and readable, a plan made with the same `args`, a render of
-that plan. A failed job is recorded and the others carry on; re-run to retry it (a broken-off
-download resumes where the server allows). Changing a job's `args` re-plans it (cached
-transcript, ~40 s) and waits for a new approval; changing `upscale` makes a new sample.
-`--yes` never approves an upscale. `--cleanup` deletes each job's `.work/` cache after its
-preview (and the clean cut, unless the job is upscaled): saves disk, but a later re-plan
-transcribes again. `--only NAME` runs one job.
+work: a download from the same link that is there and readable, a plan made with the same
+link and `args`, a render of that plan. A failed job is recorded and the others carry on;
+re-run to retry it (a broken-off download resumes where the server allows). Changing a job's
+`args` re-plans it (cached transcript, ~40 s) and waits for a new approval. Correcting its
+`url` deletes the old download (and any partial one: `<name>.source` in `in_dir` records
+which link a file came from), downloads again and re-plans. Changing `upscale` makes a new
+sample, and a full upscale whose cut or method changed starts from scratch instead of
+resuming the old frames. `--yes` never approves an upscale. `--cleanup` deletes each job's
+`.work/` cache after its preview (and the clean cut, unless the job is upscaled): saves disk,
+but a later re-plan transcribes again. `--only NAME` runs one job.
+
+One run at a time works on a manifest: it holds `<manifest>.lock` (its pid). While it runs,
+`--approve` / `--approve-upscale` from a second window only record the approval and exit; the
+running batch picks it up before it finishes. Any other second run is refused. A lock left
+by a crashed or closed run is taken over automatically. `--status` always works.
 
 Run it from a session that stays open (a T3 thread on the GPU box, or a held-open ssh): a
 detached `Start-Process` over ssh dies. Pull previews to the Mac with

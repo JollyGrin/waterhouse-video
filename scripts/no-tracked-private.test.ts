@@ -17,10 +17,16 @@ const PRIVATE = [
   /\.work\//i,
 ];
 
-// A real share link: rlkey= followed by the long random key (placeholders like
-// `rlkey=<key>` or test fakes like `rlkey=fakekey` don't match).
-const SHARE_LINK = /dropbox\.com\/[^\s"'`)]*rlkey=[A-Za-z0-9]{15,}/i;
-const GIT_SHARE_LINK = "dropbox\\.com/[^[:space:]\"'`)]*rlkey=[A-Za-z0-9]{15,}"; // the same, for git grep -E
+// A real share link: a new-style link with rlkey= and its long random key, an
+// old-style /s/<id>/ link (no rlkey, still works), or a direct
+// dropboxusercontent.com link. Placeholders (`rlkey=<key>`, `/s/<id>/`) and
+// short test fakes don't match.
+const SHARE_LINKS = [
+  "dropbox\\.com/[^[:space:]\"'`)]*rlkey=[A-Za-z0-9]{15,}",
+  "dropbox\\.com/s/[A-Za-z0-9]{10,}/",
+  "dropboxusercontent\\.com/",
+]; // POSIX ERE, for git grep -E
+const SHARE_LINK = new RegExp(SHARE_LINKS.map((p) => p.replace("[:space:]", "\\s")).join("|"), "i");
 
 function privateFiles(files: string[]): string[] {
   return files.filter((f) => PRIVATE.some((rx) => rx.test(f)));
@@ -65,6 +71,9 @@ describe("no private batch material in git", () => {
     // built at runtime, so this file doesn't trip the tracked-files check below
     const fake = "https://www.dropbox.com/scl/fi/a1b2/x.mp4?rlkey=" + "k3j4h5g6f7d8s9a0q1w2e3r4t" + "&dl=0";
     expect(SHARE_LINK.test(fake)).toBe(true);
+    expect(SHARE_LINK.test("https://www.dropbox.com/s/<id>/x.mp4?dl=0")).toBe(false);
+    expect(SHARE_LINK.test("https://www.dropbox.com/s/" + "a1b2c3d4e5f6g7h" + "/x.mp4?dl=0")).toBe(true);
+    expect(SHARE_LINK.test("https://dl.dropbox" + "usercontent.com/s/abc/x.mp4")).toBe(true);
   });
 
   it("finds none tracked in this repo", () => {
@@ -75,7 +84,7 @@ describe("no private batch material in git", () => {
   });
 
   it("finds no Dropbox share links in tracked files", () => {
-    const grep = git(["grep", "-I", "-l", "-E", GIT_SHARE_LINK, "--", ":/"]);
+    const grep = git(["grep", "-I", "-l", "-E", ...SHARE_LINKS.flatMap((p) => ["-e", p]), "--", ":/"]);
     if (grep.status === 128) return; // not a git checkout
     // git grep exits 1 when nothing matches. If this fails: remove the link and expire it in Dropbox.
     expect(grep.stdout.split("\n").filter(Boolean)).toEqual([]);

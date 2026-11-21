@@ -17,7 +17,12 @@ The manifest (JSON; never commit it, it holds share links):
 Optional top-level keys: "in_dir", "out_dir" (default: ~/Videos/sesh-in + sesh-out on Windows,
 ~/Movies/waterhouse/in + out elsewhere). Optional job keys: "args" (extra sesh-edit flags),
 "approved" (true = render without a review stop), "upscale" (true/"x4plus"/"lanczos"),
-"upscale_approved", "sample_start" (s into the clean cut, default 25% in), "sample_duration".
+"sample_start" (seconds or "mm:ss" into the clean cut, default 25% in), "sample_duration".
+A full upscale only ever starts after `--approve-upscale`, once its sample exists.
+
+One run at a time does work on a manifest (<manifest>.lock holds its pid). While a batch runs,
+`--approve` / `--approve-upscale` from a second window only record the approval; the running
+batch picks it up before it finishes.
 
 Per job: download (Dropbox dl=0 -> dl=1, rlkey kept; resumes a partial download) ->
 `sesh-edit --review` (plan + review list into <name>.review.txt) -> stop for approval, unless
@@ -28,7 +33,8 @@ for approval -> sesh-upscale + sesh-overlay -> <name>.edited.1080p.mp4.
 
 State lives in <manifest>.status.json beside the manifest. Re-running the manifest skips what is
 already done (outputs exist and were made from the same flags); a failed job is recorded and the
-others carry on. Editing a job's "args" re-plans it and needs a new approval.
+others carry on. Editing a job's "args" or "url" re-plans it (a new url downloads again) and
+needs a new approval.
 """
 from __future__ import annotations
 
@@ -38,6 +44,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -50,7 +57,7 @@ STATES = ("queued", "downloading", "planning", "awaiting-review", "rendering", "
           "upscale-sample", "awaiting-upscale-approval", "upscaling", "done", "failed")
 NAME_RX = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 VIDEO_EXTS = (".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".mts")
-JOB_KEYS = {"name", "url", "args", "approved", "upscale", "upscale_approved", "sample_start", "sample_duration"}
+JOB_KEYS = {"name", "url", "args", "approved", "upscale", "sample_start", "sample_duration"}
 # flags that would break the batch's own bookkeeping
 FORBIDDEN_ARGS = {"-o", "--output", "--review", "--from-decisions", "--work-dir"}
 
@@ -95,6 +102,9 @@ def load_manifest(path: Path) -> dict:
         seen.add(name.lower())
         if not isinstance(url, str) or not url.strip():
             raise ValueError(f"{where}: missing url")
+        if "upscale_approved" in j:
+            raise ValueError(f'{where}: "upscale_approved" isn\'t supported: a full upscale always waits for '
+                             f"its sample; approve it with --approve-upscale {name}")
         unknown = set(j) - JOB_KEYS
         if unknown:
             raise ValueError(f"{where}: unknown key(s) {sorted(unknown)} (allowed: {sorted(JOB_KEYS)})")
@@ -112,17 +122,42 @@ def load_manifest(path: Path) -> dict:
             up = "x4plus"
         if up not in (False, None, "x4plus", "lanczos"):
             raise ValueError(f'{where}: "upscale" must be true, "x4plus" or "lanczos"')
+        start = j.get("sample_start")
+        if start is not None:
+            start = parse_seconds(start)
+            if start is None:
+                raise ValueError(f'{where}: "sample_start" must be seconds or "mm:ss", got {j["sample_start"]!r}')
+        dur = parse_seconds(j.get("sample_duration", 25.0))
+        if not dur:
+            raise ValueError(f'{where}: "sample_duration" must be a positive number of seconds')
         out["jobs"].append({
             "name": name, "url": url.strip(), "args": args, "approved": bool(j.get("approved", False)),
-            "upscale": up or None, "upscale_approved": bool(j.get("upscale_approved", False)),
-            "sample_start": j.get("sample_start"), "sample_duration": float(j.get("sample_duration", 25.0)),
+            "upscale": up or None, "sample_start": start, "sample_duration": dur,
         })
     return out
 
 
+def parse_seconds(x) -> float | None:
+    """90, 90.5, "90", "1:30", "1:02:03" -> seconds; None if it isn't a time >= 0."""
+    if isinstance(x, bool):
+        return None
+    if isinstance(x, (int, float)):
+        return float(x) if x >= 0 else None
+    if not isinstance(x, str) or not re.fullmatch(r"\d+(\.\d+)?(:\d{1,2}(\.\d+)?){0,2}", x.strip()):
+        return None
+    sec = 0.0
+    for part in x.strip().split(":"):
+        sec = sec * 60 + float(part)
+    return sec
+
+
+def url_sig(url: str) -> str:
+    return hashlib.sha256(url.strip().encode()).hexdigest()[:12]
+
+
 def plan_sig(job: dict) -> str:
-    """Identifies the flags a plan was made with: changing them re-plans the job."""
-    return hashlib.sha256(json.dumps(job["args"]).encode()).hexdigest()[:12]
+    """Identifies the source and flags a plan was made with: changing either re-plans the job."""
+    return hashlib.sha256(json.dumps([job["args"], url_sig(job["url"])]).encode()).hexdigest()[:12]
 
 
 def upscale_sig(job: dict) -> str:
@@ -177,10 +212,23 @@ def _filename_ext(headers) -> str:
 def download(url: str, in_dir: Path, name: str, log=print) -> Path:
     """Download into in_dir/<name>.<ext>, resuming <name>.part. Returns the path; raises on a bad file."""
     in_dir.mkdir(parents=True, exist_ok=True)
+    # <name>.source records which link the download (or the .part) came from: a corrected link
+    # must not reuse, or resume into, the old file.
+    source = in_dir / f"{name}.source"
+    part = in_dir / f"{name}.part"
+    key = url_sig(url)
+    if source.exists() and source.read_text(encoding="utf-8").strip() != key:
+        old = find_download(in_dir, name)
+        log(f"  download: the link changed; deleting {old.name if old else 'the old partial download'}")
+        if old:
+            old.unlink()
+        part.unlink(missing_ok=True)
     have = find_download(in_dir, name)
     if have and have.stat().st_size > 0 and ffprobe_ok(have):
+        source.write_text(key, encoding="utf-8")
         log(f"  download: already have {have}")
         return have
+    source.write_text(key, encoding="utf-8")
     direct = dropbox_direct(url)
     if direct.startswith("file:") or Path(direct).exists():  # local file (tests, files already on the box)
         src = Path(urllib.request.url2pathname(urllib.parse.urlsplit(direct).path)) if direct.startswith("file:") \
@@ -188,48 +236,7 @@ def download(url: str, in_dir: Path, name: str, log=print) -> Path:
         dst = in_dir / f"{name}{src.suffix.lower() or '.mp4'}"
         shutil.copyfile(src, dst)
     else:
-        part = in_dir / f"{name}.part"
-        done = part.stat().st_size if part.exists() else 0
-        req = urllib.request.Request(direct, headers={"User-Agent": "sesh-batch/1"})
-        if done:
-            req.add_header("Range", f"bytes={done}-")
-        t0, last = time.time(), 0.0
-        try:
-            resp = urllib.request.urlopen(req, timeout=60)
-        except urllib.error.HTTPError as e:
-            if e.code == 416 and done:  # asked to resume past the end: the .part is complete or stale
-                part.unlink()
-                raise RuntimeError("partial download didn't match the file online; deleted it, re-run to start over") from None
-            hint = " (link wrong, expired or deleted?)" if e.code in (403, 404, 410) else ""
-            raise RuntimeError(f"download failed: HTTP {e.code} {e.reason}{hint}") from None
-        with resp as r:
-            ctype = (r.headers.get("Content-Type") or "").lower()
-            if "text/html" in ctype:
-                raise RuntimeError("the link returned a web page, not a video (expired link, or rlkey= missing?)")
-            if "zip" in ctype:
-                raise RuntimeError("the link is a folder (downloads as .zip); give a link to the video file itself")
-            resumed = done and r.status == 206
-            if done and not resumed:
-                log("  download: server ignored the resume request; starting over")
-                done = 0
-            total = r.headers.get("Content-Length")
-            total = int(total) + done if total else None
-            ext = url_ext(direct) or _filename_ext(r.headers) or ".mp4"
-            with open(part, "ab" if resumed else "wb") as f:
-                got = done
-                while True:
-                    buf = r.read(1 << 20)
-                    if not buf:
-                        break
-                    f.write(buf)
-                    got += len(buf)
-                    if time.time() - last > 15:
-                        last = time.time()
-                        pct = f" of {total / 1e6:.0f} MB ({100 * got / total:.0f}%)" if total else ""
-                        log(f"  download: {got / 1e6:.0f} MB{pct}, {(got - done) / 1e6 / max(1e-3, last - t0):.1f} MB/s")
-        if total and part.stat().st_size < total:
-            raise RuntimeError(f"download stopped at {part.stat().st_size} of {total} bytes; re-run to resume")
-        dst = in_dir / f"{name}{ext}"
+        dst = in_dir / f"{name}{_fetch(direct, part, log)}"
         os.replace(part, dst)
     if dst.stat().st_size == 0 or not ffprobe_ok(dst):
         bad = dst.with_suffix(dst.suffix + ".bad")
@@ -237,6 +244,56 @@ def download(url: str, in_dir: Path, name: str, log=print) -> Path:
         raise RuntimeError(f"downloaded file is not a readable video (kept as {bad.name}); check the link")
     log(f"  download: {dst} ({dst.stat().st_size / 1e6:.0f} MB)")
     return dst
+
+
+def _fetch(direct: str, part: Path, log=print) -> str:
+    """Fetch `direct` into `part`, resuming it with a Range request. Returns the file extension."""
+    done = part.stat().st_size if part.exists() else 0
+    req = urllib.request.Request(direct, headers={"User-Agent": "sesh-batch/1"})
+    if done:
+        req.add_header("Range", f"bytes={done}-")
+    try:
+        resp = urllib.request.urlopen(req, timeout=60)
+    except urllib.error.HTTPError as e:
+        if not (e.code == 416 and done):
+            hint = " (link wrong, expired or deleted?)" if e.code in (403, 404, 410) else ""
+            raise RuntimeError(f"download failed: HTTP {e.code} {e.reason}{hint}") from None
+        # asked to resume at the very end: the .part is complete when its size is the file's size
+        m = re.search(r"/(\d+)\s*$", e.headers.get("Content-Range") or "")
+        if m and int(m.group(1)) == done:
+            log("  download: the partial download was already complete")
+            return url_ext(direct) or _filename_ext(e.headers) or ".mp4"
+        part.unlink()
+        raise RuntimeError("partial download didn't match the file online; deleted it, re-run to start over") from None
+    t0, last = time.time(), 0.0
+    with resp as r:
+        ctype = (r.headers.get("Content-Type") or "").lower()
+        if "text/html" in ctype:
+            raise RuntimeError("the link returned a web page, not a video (expired link, or rlkey= missing?)")
+        if "zip" in ctype:
+            raise RuntimeError("the link is a folder (downloads as .zip); give a link to the video file itself")
+        resumed = bool(done) and r.status == 206
+        if done and not resumed:
+            log("  download: server ignored the resume request; starting over")
+            done = 0
+        total = r.headers.get("Content-Length")
+        total = int(total) + done if total else None
+        ext = url_ext(direct) or _filename_ext(r.headers) or ".mp4"
+        with open(part, "ab" if resumed else "wb") as f:
+            got = done
+            while True:
+                buf = r.read(1 << 20)
+                if not buf:
+                    break
+                f.write(buf)
+                got += len(buf)
+                if time.time() - last > 15:
+                    last = time.time()
+                    pct = f" of {total / 1e6:.0f} MB ({100 * got / total:.0f}%)" if total else ""
+                    log(f"  download: {got / 1e6:.0f} MB{pct}, {(got - done) / 1e6 / max(1e-3, last - t0):.1f} MB/s")
+    if total and part.stat().st_size < total:
+        raise RuntimeError(f"download stopped at {part.stat().st_size} of {total} bytes; re-run to resume")
+    return ext
 
 
 # ---------------------------------------------------------------- resume logic
@@ -274,34 +331,141 @@ def next_step(job: dict, st: dict, out: dict[str, Path], yes: bool = False) -> s
         return "done"
     if not out["compare"].exists() or st.get("sample_sig") != usig:
         return "upscale-sample"
-    if not (job["upscale_approved"] or st.get("upscale_approved_sig") == usig):
+    if st.get("upscale_approved_sig") != usig:
         return "awaiting-upscale-approval"
     return "upscale"
 
 
 # ---------------------------------------------------------------- running tools
 
+def pid_alive(pid: int) -> bool:
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    if sys.platform == "win32":
+        import ctypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return ctypes.get_last_error() == 5  # access denied: it exists
+        code = ctypes.c_ulong()
+        ok = k32.GetExitCodeProcess(h, ctypes.byref(code))
+        k32.CloseHandle(h)
+        return bool(ok) and code.value == 259  # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+class Lock:
+    """An exclusive lock file holding the owner's pid. A lock left by a process that is gone
+    (crash, closed window) is taken over."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.held = False
+
+    def holder(self) -> dict:
+        try:
+            return json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def acquire(self) -> dict | None:
+        """None when acquired, else the holder's {pid, host, since}."""
+        for _ in range(5):
+            try:
+                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                info = self.holder()
+                if not info:  # being written right now, or garbage: give it a moment
+                    time.sleep(0.1)
+                    if not self.holder() and time.time() - self._mtime() > 10:
+                        self.path.unlink(missing_ok=True)
+                    continue
+                if info.get("host") == socket.gethostname() and not pid_alive(info.get("pid")):
+                    self.path.unlink(missing_ok=True)  # stale: its process is gone
+                    continue
+                return info
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"pid": os.getpid(), "host": socket.gethostname(), "since": now()}, f)
+            self.held = True
+            return None
+        return self.holder() or {"pid": None, "since": "?"}
+
+    def _mtime(self) -> float:
+        try:
+            return self.path.stat().st_mtime
+        except OSError:
+            return time.time()
+
+    def release(self) -> None:
+        if self.held:
+            self.path.unlink(missing_ok=True)
+            self.held = False
+
+
 class Status:
+    """<manifest>.status.json. Every write re-reads the file and merges under a short write lock,
+    so an approval recorded from another window is never overwritten."""
+
     def __init__(self, path: Path, manifest: Path):
         self.path = path
-        self.data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-        self.data.setdefault("jobs", {})
-        self.data["manifest"] = str(manifest)
+        self.manifest = str(manifest)
+        self.wlock = Lock(path.with_name(path.name + ".wlock"))
+        self.data = self._read()
+
+    def _read(self) -> dict:
+        d: dict = {}
+        for i in range(20):
+            try:
+                d = json.loads(self.path.read_text(encoding="utf-8"))
+                break
+            except FileNotFoundError:
+                break
+            except (PermissionError, ValueError):  # Windows: mid-replace by another process
+                if i == 19:
+                    raise
+                time.sleep(0.05)
+        d.setdefault("jobs", {})
+        return d
+
+    def reload(self) -> Status:
+        self.data = self._read()
+        return self
 
     def job(self, name: str) -> dict:
-        return self.data["jobs"].setdefault(name, {"state": "queued"})
+        return self.data["jobs"].get(name) or {"state": "queued"}
 
     def set(self, name: str, **kw) -> None:
-        j = self.job(name)
-        j.update(kw)
-        j["updated"] = now()
-        self.save()
-
-    def save(self) -> None:
-        self.data["updated"] = now()
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.data, indent=1), encoding="utf-8")
-        os.replace(tmp, self.path)
+        deadline = time.time() + 15
+        while self.wlock.acquire() is not None:
+            if time.time() > deadline:
+                raise RuntimeError(f"{self.path.name} stays locked ({self.wlock.path.name}); is another sesh-batch stuck?")
+            time.sleep(0.05)
+        try:
+            self.data = self._read()
+            j = self.data["jobs"].setdefault(name, {"state": "queued"})
+            j.update(kw)
+            j["updated"] = now()
+            self.data["manifest"] = self.manifest
+            self.data["updated"] = now()
+            tmp = self.path.with_name(f"{self.path.name}.{os.getpid()}.tmp")
+            tmp.write_text(json.dumps(self.data, indent=1), encoding="utf-8")
+            for i in range(20):
+                try:
+                    os.replace(tmp, self.path)
+                    break
+                except PermissionError:  # Windows: a reader has it open for a moment
+                    if i == 19:
+                        raise
+                    time.sleep(0.05)
+        finally:
+            self.wlock.release()
 
 
 def run_tool(cmd: list[str], log_path: Path, echo=print, capture: bool = False) -> str:
@@ -368,22 +532,22 @@ def upscale_args(method: str) -> list[str]:
 
 def run_job(job: dict, man: dict, status: Status, opts, echo=print) -> str:
     name = job["name"]
-    st = status.job(name)
+    st = status.reload().job(name)
     out = outputs(man["out_dir"], name)
     sig = plan_sig(job)
     say = lambda m: echo(f"[{now()}] {name}: {m}")  # noqa: E731
 
-    # download (always first: cheap if the file is already there)
-    have = st.get("input")
-    if not (have and Path(have).exists() and Path(have).stat().st_size > 0):
+    # download (always first: cheap if the file from this link is already there)
+    have, key = st.get("input"), url_sig(job["url"])
+    if not (have and st.get("input_url") == key and Path(have).exists() and Path(have).stat().st_size > 0):
         status.set(name, state="downloading", error=None)
         say("downloading")
         src = download(job["url"], man["in_dir"], name, log=say)
-        status.set(name, input=str(src))
+        status.set(name, input=str(src), input_url=key)
     src = Path(status.job(name)["input"])
 
     while True:
-        step = next_step(job, status.job(name), out, yes=opts.yes)
+        step = next_step(job, status.reload().job(name), out, yes=opts.yes)
         if step == "plan":
             status.set(name, state="planning", error=None)
             say("planning (sesh-edit --review)")
@@ -442,15 +606,22 @@ def run_job(job: dict, man: dict, status: Status, opts, echo=print) -> str:
             say(f"upscale sample ready (left original, right upscaled): {out['compare']}")
             return "awaiting-upscale-approval"
         elif step == "upscale":
-            status.set(name, state="upscaling", upscale_approved_sig=upscale_sig(job))
+            usig = upscale_sig(job)
+            work = out["clean_hd"].with_suffix(".upscale-work")
+            if status.job(name).get("upscale_run_sig") != usig:
+                # frames from another cut or method must never be resumed into this one
+                shutil.rmtree(work, ignore_errors=True)
+                out["clean_hd"].unlink(missing_ok=True)
+                out["edited_hd"].unlink(missing_ok=True)
+            status.set(name, state="upscaling", upscale_run_sig=usig)
             say(f"full upscale ({job['upscale']}); resumable, re-run to continue if stopped")
-            run_tool(py("upscale") + [str(out["clean"]), "-o", str(out["clean_hd"]),
+            run_tool(py("upscale") + [str(out["clean"]), "-o", str(out["clean_hd"]), "--work", str(work),
                                       *upscale_args(job["upscale"])], out["log"], echo)
             run_tool(py("overlay") + [str(out["decisions"]), str(out["clean_hd"]), "-o", str(out["edited_hd"])],
                      out["log"], echo)
             status.set(name, upscaled_sig=upscale_sig(job), edited_hd=str(out["edited_hd"]))
             if opts.cleanup:
-                shutil.rmtree(out["clean_hd"].with_suffix(".upscale-work"), ignore_errors=True)
+                shutil.rmtree(work, ignore_errors=True)
         elif step == "done":
             status.set(name, state="done", error=None, edited=str(out["edited"]))
             say("done")
@@ -458,6 +629,18 @@ def run_job(job: dict, man: dict, status: Status, opts, echo=print) -> str:
 
 
 # ---------------------------------------------------------------- main
+
+def lock_path(manifest: Path) -> Path:
+    return manifest.with_name(manifest.stem + ".lock")
+
+
+def approved_meanwhile(jobs: list[dict], results: dict, man: dict, status: Status, opts) -> list[dict]:
+    """Jobs that stopped for approval and were approved from another window during the run."""
+    status.reload()
+    waiting = ("awaiting-review", "awaiting-upscale-approval")
+    return [j for j in jobs if results.get(j["name"]) in waiting
+            and next_step(j, status.job(j["name"]), outputs(man["out_dir"], j["name"]), yes=opts.yes) not in waiting]
+
 
 def preflight(need_llm: bool) -> list[str]:
     from . import intro
@@ -476,7 +659,7 @@ def preflight(need_llm: bool) -> list[str]:
 def print_status(status: Status, man: dict) -> None:
     print(f"{'job':<20} {'state':<26} note")
     for job in man["jobs"]:
-        st = status.data["jobs"].get(job["name"], {"state": "queued"})
+        st = status.job(job["name"])
         note = st.get("error") or {
             "awaiting-review": st.get("review"), "awaiting-upscale-approval": st.get("compare"),
             "done": st.get("preview") and f"preview {st.get('preview_mb')} MB: {st.get('preview')}",
@@ -503,7 +686,7 @@ def main(argv: list[str] | None = None) -> int:
     opts = ap.parse_args(argv)
     for stream in (sys.stdout, sys.stderr):  # a Windows console can't print every character a transcript has
         if hasattr(stream, "reconfigure"):
-            stream.reconfigure(errors="replace")
+            stream.reconfigure(errors="replace", line_buffering=True)  # live progress in a log file too
 
     mpath = Path(opts.manifest).expanduser().resolve()
     try:
@@ -518,22 +701,46 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: no job named {n!r} in {mpath.name}", file=sys.stderr)
             return 2
 
-    # approvals are for the plan that exists now: a later change to the job's flags needs a new one
+    record_approvals(man, status, opts)
+    if opts.status:
+        print_status(status.reload(), man)
+        return 0
+
+    lock = Lock(lock_path(mpath))
+    holder = lock.acquire()
+    if holder is not None:
+        who = f"pid {holder.get('pid')} on {holder.get('host', '?')}, since {holder.get('since')}"
+        if opts.approve or opts.approve_upscale:
+            print(f"a batch is already running this manifest ({who}): approval recorded; "
+                  "the running batch picks it up before it finishes")
+            return 0
+        print(f"error: a batch is already running this manifest ({who}). Wait for it, or use "
+              f"--status / --approve. If that process is really gone, delete {lock.path}", file=sys.stderr)
+        return 2
+    try:
+        return run_batch(man, mpath, status, opts)
+    finally:
+        lock.release()
+
+
+def record_approvals(man: dict, status: Status, opts) -> None:
+    """Approvals are for the plan (and sample) that exist now: changing the job needs a new one."""
+    status.reload()
     for job in man["jobs"]:
         n, st = job["name"], status.job(job["name"])
         if (n in opts.approve or "all" in opts.approve) and st.get("planned_sig") == plan_sig(job):
-            st["approved_sig"] = plan_sig(job)
+            status.set(n, approved_sig=plan_sig(job))
+            print(f"approved: {n}")
         elif n in opts.approve:
-            print(f"note: {n} has no plan yet (or its flags changed): it will be planned first, then wait again")
+            print(f"note: {n} has no plan yet (or its link or flags changed): it will be planned first, then wait again")
         if n in opts.approve_upscale and st.get("sample_sig") == upscale_sig(job):
-            st["upscale_approved_sig"] = upscale_sig(job)
+            status.set(n, upscale_approved_sig=upscale_sig(job))
+            print(f"upscale approved: {n}")
         elif n in opts.approve_upscale:
             print(f"note: {n} has no upscale sample for its current plan yet: it will make one, then wait again")
-    status.save()
-    if opts.status:
-        print_status(status, man)
-        return 0
 
+
+def run_batch(man: dict, mpath: Path, status: Status, opts) -> int:
     problems = preflight(need_llm=True)
     if problems:
         for p in problems:
@@ -542,22 +749,23 @@ def main(argv: list[str] | None = None) -> int:
     man["out_dir"].mkdir(parents=True, exist_ok=True)
     print(f"sesh-batch: {len(man['jobs'])} job(s) from {mpath.name}; in {man['in_dir']}, out {man['out_dir']}")
     print(f"status: {status.path}")
-    results = {}
-    for job in man["jobs"]:
-        if opts.only and job["name"] not in opts.only:
-            continue
-        try:
-            results[job["name"]] = run_job(job, man, status, opts)
-        except KeyboardInterrupt:
-            status.set(job["name"], state="failed", error="interrupted")
-            raise
-        except Exception as e:  # one bad job never stops the batch
-            msg = f"{type(e).__name__}: {e}" if not isinstance(e, RuntimeError) else str(e)
-            status.set(job["name"], state="failed", error=msg)
-            print(f"[{now()}] {job['name']}: FAILED: {msg}", flush=True)
-            results[job["name"]] = "failed"
+    results: dict[str, str] = {}
+    todo = [j for j in man["jobs"] if not opts.only or j["name"] in opts.only]
+    while todo:
+        for job in todo:
+            try:
+                results[job["name"]] = run_job(job, man, status, opts)
+            except KeyboardInterrupt:
+                status.set(job["name"], state="failed", error="interrupted")
+                raise
+            except Exception as e:  # one bad job never stops the batch
+                msg = f"{type(e).__name__}: {e}" if not isinstance(e, RuntimeError) else str(e)
+                status.set(job["name"], state="failed", error=msg)
+                print(f"[{now()}] {job['name']}: FAILED: {msg}", flush=True)
+                results[job["name"]] = "failed"
+        todo = approved_meanwhile(todo, results, man, status, opts)
     print("\n=== BATCH ===")
-    print_status(status, man)
+    print_status(status.reload(), man)
     return 1 if "failed" in results.values() else 0
 
 
