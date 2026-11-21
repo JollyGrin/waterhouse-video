@@ -71,6 +71,7 @@ downloads ~3.5 GB of models. Renders land in `out/` (gitignored). No tokens or
 | [longform/README.md](longform/README.md) | the sesh-edit reference: flags, pipeline, the GPU box, upscaling |
 | [longform/docs/quality-and-upscaling.md](longform/docs/quality-and-upscaling.md) | why the upscaler is what it is |
 | `public/audio/*/CREDITS.md` | where every tracked sound comes from and its licence |
+| `scripts/private-media.ts` | the media templates use that can't be in this public repo, and where it comes from |
 | [docs/CONTENT_PLAN.md](docs/CONTENT_PLAN.md) | early planning notes, history only |
 
 ---
@@ -519,11 +520,15 @@ and [#11 here](https://github.com/JollyGrin/waterhouse-video/issues/11).
 
 ## Media for local compositions
 
-Some compositions play footage that is too large or too private for git
-(`public/session/`, `public/reel/` and `public/fort-riddim/` are gitignored).
-On a fresh clone they show a "Missing media" card naming each missing file
-instead of failing with a 404. Once the files are in place they render
-normally.
+Template media is committed when it is small and ours (#50; the rule is in
+AGENTS.md, "Media a template needs"), so every other composition renders on a
+fresh clone. The ones below play footage, photos or music that can't be public
+(`public/session/`, `public/reel/`, `public/fort-riddim/`, `public/artists/`
+and `public/audio/private/` are gitignored). `scripts/private-media.ts` lists
+those folders and `bun run test` fails on a template file that is neither
+committed nor listed there. The footage compositions show a "Missing media"
+card naming each missing file instead of failing with a 404. Once the files
+are in place they render normally.
 
 | Composition | Needs (under `public/`) | Where it comes from |
 |---|---|---|
@@ -533,6 +538,8 @@ normally.
 | FortRiddim | `fort-riddim/c1m.mp4`, `c1fx.mp4`, `c2fx.mp4`, `c3m.mp4`, `c3fx.mp4`, `soundtrack.wav`, `logo-white.png`, `poster/{boogie,disc,top,lineup,info}.png` | clips and soundtrack: `bun scripts/fort-riddim/make.ts --c1 IMG_2250.MOV --c2 IMG_2253.MOV --c3 IMG_2246.MOV` (or `FORT_RIDDIM_C1/_C2/_C3`) from Manuel's phone footage; logo and poster cut-outs: copied in by hand from the FORT RIDDIM poster artwork |
 | FortRiddimPromo | `fort-riddim/promo.mp4` | `bun run promo --source FORTRIDDIMPROMO.MP4` (or `FORT_RIDDIM_PROMO_SRC`), Manuel's disc animation |
 | FortRiddimShowcase | `fort-riddim/promo.mp4` | as FortRiddimPromo; `bun run showcase --source FORTRIDDIMPROMO.MP4` |
+| SessionPoster (Studio default) | `artists/timo-feyman.png` | `bun run poster --photo <path-or-url>` copies the photo in; any photo works for a preview |
+| WeeklyLineup with music | `audio/private/<track>.mp3` | `bun scripts/pick-track.ts` copies this week's bed from the music library folder (ask Dean); without it the video is silent |
 
 Ask whoever made the cut for the files, or regenerate them from the sources
 with the commands above.

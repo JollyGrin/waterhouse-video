@@ -6,7 +6,10 @@ to Claude ("make the PullUp promo for Friday", "render the door stinger",
 WhatsApp so others can use the same thing.
 
 When you make a new template, Claude names it, adds it here and tells you
-the name. Rules for names and where things go: [AGENTS.md, "Templates"](AGENTS.md#templates-names-people-can-say).
+the name. It also commits the template's sounds and pictures with it (small,
+and only ones we made or may publish: no songs by other artists), so the
+template renders for everyone once Dean adds it. Rules for names, media and
+where things go: [AGENTS.md, "Templates"](AGENTS.md#templates-names-people-can-say).
 
 To see any of them move: ask Claude to *"open Remotion Studio"* and click
 the name in the list on the left.
