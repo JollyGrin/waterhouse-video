@@ -18,8 +18,8 @@ public/audio/*.wav
 public/audio/*.flac
 public/audio/*.aif*
 public/audio/*.m4a
-# Fuse-Drums' first test cut of a third-party song (#49), replaced by our own
-# drum track in public/ident/audio/fusedrums/ (#51)
+# Denzo's old local copy of the Fuse-Drums clip (#49); the committed clip
+# lives under public/ident/audio/fusedrums/
 public/audio/fuse-drums/
 
 # Working files for the session video edit (large intermediates)

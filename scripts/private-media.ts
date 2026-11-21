@@ -31,8 +31,8 @@ export const PRIVATE_MEDIA: PrivateMedia[] = [
   },
   {
     path: "audio/fuse-drums/",
-    why: "third-party song, old Fuse-Drums test (#49), replaced by ident/audio/fusedrums/ (#51)",
-    from: "nowhere any more: delete it if it is on your computer; Fuse-Drums uses our own drum track",
+    why: "Denzo's old local copy of the Fuse-Drums clip (#49); the committed clip lives under ident/audio/fusedrums/",
+    from: "only Denzo's computer has it; nothing uses it any more, so it can be deleted",
   },
   {
     path: "session/",
