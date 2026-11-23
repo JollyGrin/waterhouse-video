@@ -7,8 +7,20 @@ dist
 out
 build
 
-# Weekly music tracks (copyrighted) + local test audio — keep out of the public repo
-public/audio/
+# Template media is committed (#50): public/audio/<kit>/ and public/ident/ are
+# tracked, as long as each file is small and ours. What stays out is private
+# or large; scripts/private-media.ts lists it with where it comes from.
+# Copyrighted music (the weekly lineup beds) and local test audio:
+public/audio/private/
+# loose tracks left directly in public/audio/ (the old pick-track, test songs)
+public/audio/*.mp3
+public/audio/*.wav
+public/audio/*.flac
+public/audio/*.aif*
+public/audio/*.m4a
+# Denzo's old local copy of the Fuse-Drums clip (#49); the committed clip
+# lives under public/ident/audio/fusedrums/
+public/audio/fuse-drums/
 
 # Working files for the session video edit (large intermediates)
 work/
@@ -17,6 +29,10 @@ public/session/
 # Large media and per-machine state — local only
 public/fort-riddim/
 public/reel/
+# Reel definitions for real interviews quote the transcript (#55): keep them next to
+# the episode (sesh-out/reel/). Only the made-up example is committed.
+*.reel.json
+!src/reel/data/example.reel.json
 public/artists/
 posters/state.json
 weekly/state.json
@@ -35,3 +51,18 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# sesh-batch (#47): manifests hold Dropbox share links, status files and outputs name
+# private recordings. Keep manifests outside the repo anyway; these catch strays.
+batch*.json
+*.batch.json
+*.status.json
+*.status.json.wlock
+batch*.lock
+*.batch.lock
+*.part
+*.srt
+*.decisions.json
+*.review.txt
+*.work/
+*.upscale-work/

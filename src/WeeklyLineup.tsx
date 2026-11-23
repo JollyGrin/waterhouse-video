@@ -43,7 +43,7 @@ export const WeeklyLineupSchema = z.object({
   weekLabel: z.string(),
   dateRange: z.string(),
   artists: z.array(ArtistEventSchema),
-  // Path under public/ (e.g. "audio/song.mp3") or a full URL.
+  // Path under public/ (e.g. "audio/private/song.mp3", where pick-track puts it) or a full URL.
   // When set, the song plays over the video and the outro logo pulses to its beat.
   audioTrack: z.string().nullable().optional(),
   // Seconds into the track to start playback from — use it to skip a quiet

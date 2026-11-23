@@ -26,10 +26,12 @@ There are two tools in here, and Claude chooses between them for you:
 | **Edit a recorded video**: cut silences and "um"s, fix audio sync and the mics, add captions, make the 1080p version, put the intro on | **sesh-edit** | `longform/` |
 
 > **This repo is public.** Anyone on the internet can read it. Footage,
-> photos, music and finished videos are **never** committed. The folders they
-> go in are already set up so git ignores them (see
-> [Where your files go](#2-where-your-files-go)). If Claude ever asks to commit
-> a video, image or audio file, say no.
+> artists' photos, songs by other artists and finished videos are **never**
+> committed. The folders they go in are already set up so git ignores them
+> (see [Where your files go](#2-where-your-files-go)). The one kind of media
+> that *is* committed: the short sounds and pictures a template is made of,
+> when we made them ourselves. Claude takes care of that, so a template you
+> make renders for everyone.
 
 ---
 
@@ -77,7 +79,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # close and reopen Terminal so `uv` is found, then:
 cd ~/git/waterhouse-video/longform
 uv sync
-cd .. && bun run render:intro   # builds the Fuse intro sesh-edit puts on every edit (~30 s)
+cd .. && bun run render:intro   # builds the Fuse-Drums intro sesh-edit puts on every edit (~30 s)
 ```
 
 - The first real edit downloads about **3.5 GB** of speech models
@@ -120,18 +122,26 @@ yourself.
 | **Animations** (promo clips, boards, recaps, stingers, reels) | `out/` in the repo | Ignored by git. Each command prints the exact file name. |
 | **Posters** | `out/posters/` | |
 | **Artist photos** for posters | anywhere, e.g. `~/Downloads/` | Give Claude the path (you can drag the file into the Terminal window). It copies the photo into `public/artists/`, which git ignores. |
-| **Music** | ask Dean for the music library folder | The weekly music beds are copyrighted. They live in `public/audio/` locally and are never committed. |
+| **Music** | ask Dean for the music library folder | The weekly music beds are copyrighted. They live in `public/audio/private/` locally and are never committed. A song you only want to try in a template goes there too. |
 
 On the GPU box the folders are `C:\Users\<you>\Videos\sesh-in\` (in) and
 `C:\Users\<you>\Videos\sesh-out\` (out).
 
-**Never commit media.** Git ignores `out/`, `work/`, `public/session/`,
-`public/reel/`, `public/artists/`, `public/fort-riddim/` and most of
-`public/audio/`. The only media in the repo is the sound kits in
-`public/audio/{bumper,pullup,recap}/` (made by us or free-licensed). Renders
-never go in git, not even as examples: they can always be made again. If `git status` ever shows a `.mp4`, `.mov`,
-`.wav`, `.jpg` or `.png` you didn't expect, ask Claude to remove it from the
-commit.
+**What goes in git and what doesn't.** Git ignores `out/`, `work/`,
+`public/session/`, `public/reel/`, `public/artists/`, `public/fort-riddim/`
+and `public/audio/private/`. The only media in the repo is what templates are
+made of: the sound kits in `public/audio/` and the idents' sounds and
+pictures in `public/ident/`, all made by us or free-licensed, and small.
+When you make a template, Claude commits its sounds with it, so Dean and
+everyone else can render it straight after they get it. You never need to
+send anyone a file.
+
+Songs by other artists never go in a template, not even a few seconds: the
+repo is public, and a video on someone else's song gets copyright claims on
+YouTube. Ask Claude for an original sound instead (a drum hit, a hum, a
+riser). Renders never go in git either, not even as examples: they can
+always be made again. If `git status` ever shows a `.mp4`, `.mov`, `.wav`,
+`.jpg` or `.png` you didn't expect, ask Claude to remove it from the commit.
 
 ---
 
@@ -154,13 +164,9 @@ Claude asks if something is missing (which artist, which date, which file).
 | **"The caption says 'Waterhose', fix it"** | Re-renders with that word replaced everywhere. Uses the cached transcript, so it's fast. | same file, overwritten (or a `v2` if you ask) |
 | **"Cut 20:03 to 20:29 out, that's us talking to the camera guy"** | Adds a manual cut (times from the original file) and re-renders. | same as above |
 | **"Make the 1080p version"** | Quick version on a laptop (minutes, a bit soft). The proper AI upscale runs on the GPU box and takes hours. Then the captions and intro are drawn again at 1080p so the text stays sharp. | `~/Movies/waterhouse/out/<name>.edited.1080p.mp4` |
+| **"Run these 8 Dropbox videos on the GPU box"** (paste the links, one per guest) | Claude writes a batch list on the GPU box (never in the repo: the links are private), downloads every video, and makes each edit's plan. You read the plans, say which are fine, and it renders those with the Fuse-Drums intro and captions, plus a small preview of each. One that fails doesn't stop the others; asking again carries on where it stopped. No 1080p unless you ask for it per video, and then you first get a 25-second before/after sample to approve. | `C:\Users\<you>\Videos\sesh-out\<name>.edited.mp4` and `<name>.preview.mp4` on the GPU box |
 | **"Make a new stinger: a cassette tape rewinding into the logo"** | Claude builds it in the house style, gives it a one-word name (say, *Rewind*), adds it to [TEMPLATES.md](TEMPLATES.md) and tells you the name. Share the name in WhatsApp so others can ask for "the Rewind stinger". | `out/Bumper-rewind.webm` once rendered |
-| **"Make a 9:16 reel from the best 30 seconds of the Boogie interview"** | Claude reads the transcript, proposes a 30-second span, and renders a vertical reel that cuts between the speakers with big captions and an end card. See the note below. | `out/reels/<slug>.mp4` |
-
-**About reels:** the reel animation works, but the step that feeds it an
-edited interview's captions isn't built yet. Claude can still do it by hand
-(convert sesh-edit's word timings), but expect some back-and-forth, or ask
-Dean.
+| **"Make a reel from the best 30 seconds of the Boogie interview"** (or name the bit: *"from 12:40, where he says '...'"*) | Claude reads the edit's captions, proposes a 20–30 second span (or finds the one you quoted), and renders an Instagram reel: the Fuse-Drums intro, the clip cropped to 9:16 cutting between the speakers, big captions and the YouTube end bumper ("full interview on YouTube"), at Instagram loudness. Needs the edited interview's clean cut and its plan file. | `<name>.reel.mp4` next to the interview's outputs |
 
 Every template has a name you can say: *Fuse*, *door*, *PullUp*, ... The
 full list is [TEMPLATES.md](TEMPLATES.md).
@@ -215,6 +221,40 @@ It never cuts those by itself. Watch them and tell Claude what to do:
 - *"Put a title card 'How did you first get into electronic music?' at 0:01"*
 
 Then *"render it"*.
+
+### A batch of interviews on the GPU box
+
+For several recordings at once, send Claude the Dropbox links (a session on
+the GPU box, which Dean sets up) and say *"run these"*. Claude runs
+`sesh-batch` (reference: `longform/README.md`, "A batch of interviews"):
+
+1. It downloads each video into `C:\Users\<you>\Videos\sesh-in\` and makes
+   its plan: `<name>.review.txt` in `sesh-out\`, the same plan and review list
+   as above.
+2. You read the plans and say which are fine (*"oscar and mira are good,
+   cut 20:03 to 20:29 in mira first"*). Say *"don't stop for review"* to
+   skip this step.
+3. It renders those: the Fuse-Drums intro, no outro, captions burned in, and a
+   **preview** (`<name>.preview.mp4`, 360p, about 1.3 MB per minute) to check
+   timing and sound.
+4. Copy the previews to your Mac in Terminal (`gpu` is the ssh name Dean gave
+   the box):
+
+   ```sh
+   scp "gpu:Videos/sesh-out/*.preview.mp4" ~/Movies/waterhouse/out/
+   ```
+
+No 1080p version unless you ask for one for a video. Then it first makes a
+25-second sample, the original and the upscale side by side
+(`<name>.upscale-compare.mp4`), and waits until you say go: the full upscale
+takes hours.
+
+Setting up the GPU box (done once, by Dean): `bun install` at the repo root,
+`cd longform; uv sync` (installs the CUDA build of torch, so transcription
+runs on the graphics card), then `bun run render:intro` with the portable
+Node 22 first on PATH (the system Node is too old):
+`$env:PATH = "C:\Users\<you>\tools\node-v22.23.5-win-x64;" + $env:PATH`.
+`claude` must be logged in there too.
 
 ---
 
@@ -311,7 +351,6 @@ Claude Code already installed:
     hand-off (all need the 3.5 GB model download, which wasn't done on this
     machine);
   - the x4plus upscale (GPU box only);
-  - a reel from a sesh-edit interview (the missing step above);
   - a full Fuse or ident render (`bun run render:ident`: GPU box);
   - installing Homebrew, Claude Code and Bun from scratch (they were already
     installed);

@@ -88,7 +88,7 @@ def write_srt(lines: list[dict], path: Path) -> None:
     out = []
     for i, ln in enumerate(lines, 1):
         out.append(f"{i}\n{_ts(ln['start'])} --> {_ts(ln['show_end'])}\n{' '.join(w['text'] for w in ln['words'])}\n")
-    path.write_text("\n".join(out))
+    path.write_text("\n".join(out), encoding="utf-8")
 
 
 class Renderer:

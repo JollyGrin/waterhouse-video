@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 /**
- * Build the intro sesh-edit prepends to edited Sessions videos (Fuse 16:9, #38).
+ * Build the intro sesh-edit prepends to edited Sessions videos (Fuse-Drums 16:9: Fuse's picture on
+ * a drum track by Denzo's brother, #38, #51).
  *
- *   bun run render:intro            # render Fuse, then write the three files below
- *   bun run render:intro --reuse    # skip the Remotion render if out/ident/IdentFuse-16x9.mov exists
+ *   bun run render:intro            # render Fuse-Drums, then write the three files below
+ *   bun run render:intro --reuse    # skip the Remotion render if out/ident/IdentFuse-Drums-16x9.mov exists
  *
  * Writes into longform/src/sesh_edit/assets/intro/ (gitignored, bundled into the
  * sesh-edit wheel through hatch `artifacts`):
@@ -11,7 +12,9 @@
  *   fuse-16x9.flac   the soundtrack (sesh-edit reads audio from this sidecar)
  *   fuse-16x9.json   {"open_s": ...}: where the interview starts showing through
  *
- * The ProRes 4444 master comes from `render:ident` (out/ident/IdentFuse-16x9.mov).
+ * The ProRes 4444 master comes from `render:ident` (out/ident/IdentFuse-Drums-16x9.mov).
+ * The asset names stay fuse-16x9.* (what sesh-edit's intro.py and existing decisions.json files
+ * reference): it is still the Fuse picture, only the soundtrack differs.
  * The webm is encoded with no extra colour flags: ffmpeg carries the master's tags
  * over as they are (bt709 primaries, sRGB transfer, no matrix). Tagging the matrix
  * bt709 made decoders convert it differently. A 5 s render is fine on a laptop.
@@ -25,10 +28,10 @@ import { ffEnv, pathBin } from "./lib/ff";
 import { renderCommand, run } from "./render-ident";
 import { hasAlpha, probeVideo } from "./render-bumper";
 
-export const INTRO_COMP = "IdentFuse-16x9";
+export const INTRO_COMP = "IdentFuse-Drums-16x9";
 export const INTRO_DIR = join("longform", "src", "sesh_edit", "assets", "intro");
 export const INTRO_STEM = "fuse-16x9";
-/** Fuse frame where the rings start to open onto the interview, at the comp's 30 fps. */
+/** Fuse frame where the rings start to open onto the interview, at the comp's 30 fps (same picture in Fuse-Drums). */
 export const OPEN_FRAME = 118;
 export const FPS = 30;
 

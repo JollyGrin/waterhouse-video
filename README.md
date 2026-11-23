@@ -39,7 +39,7 @@ people use for it in [TEMPLATES.md](TEMPLATES.md).
 
 Idents are **made** in Remotion and **composited** by sesh-edit: Fuse
 (`src/ident/Fuse.tsx`) is the Sessions intro, and `bun run render:intro`
-builds it into sesh-edit. Details: AGENTS.md, "Hand-off".
+builds its Fuse-Drums cut (the same picture on a drum track by Denzo's brother) into sesh-edit. Details: AGENTS.md, "Hand-off".
 
 ## Quick commands (developers)
 
@@ -50,7 +50,7 @@ ffmpeg, Bun and uv:
 git clone https://github.com/JollyGrin/waterhouse-video.git && cd waterhouse-video
 bun install                                  # animations (Remotion)
 (cd longform && uv sync)                     # video editing (sesh-edit)
-bun run render:intro                         # the Fuse intro sesh-edit needs (not in git)
+bun run render:intro                         # the Fuse-Drums intro sesh-edit needs (not in git)
 
 bunx remotion studio                         # preview every animation in the browser
 bun run render:recap --fixture               # render one: out/Recap-tj-gee-2026-09-03.mp4
@@ -71,6 +71,7 @@ downloads ~3.5 GB of models. Renders land in `out/` (gitignored). No tokens or
 | [longform/README.md](longform/README.md) | the sesh-edit reference: flags, pipeline, the GPU box, upscaling |
 | [longform/docs/quality-and-upscaling.md](longform/docs/quality-and-upscaling.md) | why the upscaler is what it is |
 | `public/audio/*/CREDITS.md` | where every tracked sound comes from and its licence |
+| `scripts/private-media.ts` | the media templates use that can't be in this public repo, and where it comes from |
 | [docs/CONTENT_PLAN.md](docs/CONTENT_PLAN.md) | early planning notes, history only |
 
 ---
@@ -93,7 +94,7 @@ Chromium).
 | **WaterhouseSession** | 10 s looping clip for the Tuesday "Waterhouse Sessions" night: the guest and Denzo side by side in the stream window, with the running order ("interview with Denzo, then live set") under it | The guest forwards it to friends before the session | `bun run render:session` (guests from the booking) or `--guest "Duncen"` |
 | **WeeklyLineup** | This week's lineup as a story | Instagram story | `bun run render:weekly` |
 | **SessionBumper** | A library of ready-made 3–4 s stingers that open onto a live scene. Landscape, webm with alpha, eight ideas: "door", "corner", "lamp", "paper", "neon", "vhs", "fader" and "flap". (The Sessions intro itself is Fuse, see [Idents](#idents-fuse--the-sessions-intro).) | OBS, as a Stinger transition into any scene | `bun run render:bumper --idea door` |
-| **Idents** (`src/ident/`) | Channel idents with alpha, portrait and 16:9. **Fuse is the Waterhouse Sessions intro**; FuseLines are three alternatives. See [Idents](#idents-fuse--the-sessions-intro) | Opening edited Sessions videos (sesh-edit bundles Fuse), OBS | `bun run render:ident Fuse-16x9` |
+| **Idents** (`src/ident/`) | Channel idents with alpha, portrait and 16:9. **Fuse is the Waterhouse Sessions intro**; FuseLines are three alternatives. See [Idents](#idents-fuse--the-sessions-intro) | Opening edited Sessions videos (sesh-edit bundles Fuse-Drums), OBS | `bun run render:ident Fuse-16x9` |
 
 Output lands in `out/` (gitignored). A clip takes 1–2 minutes to render.
 Renders are never committed: to see what a composition looks like, render it
@@ -395,6 +396,7 @@ redrawn beam. The other 24 are the prototype's other ideas, kept as stock.
 | Idea | Comp ids | What it is |
 | --- | --- | --- |
 | Fuse | `IdentFuse`, `IdentFuse-16x9` | **the Sessions intro** (5 s) |
+| Fuse-Drums | `IdentFuse-Drums`, `IdentFuse-Drums-16x9` | Fuse's picture on a 5 s cut of "hu" (made for Waterhouse by Denzo's brother), the big hit on the lock (f55): **the cut sesh-edit puts on edits** (`public/ident/audio/fusedrums/mix.wav`, committed; `fusedrums/gen-audio.py` re-cuts it from the song) |
 | FuseLines-Ink | `IdentFuseLines-Ink`, `IdentFuseLines-Ink-16x9` | Fuse with the beam as an ink line after the Waterhouse Radio poster, Denzo 4 semitones lower |
 | FuseLines-Wave | `IdentFuseLines-Wave`, `IdentFuseLines-Wave-16x9` | the ink line with wave echoes, Denzo 7 semitones lower |
 | FuseLines-Draft | `IdentFuseLines-Draft`, `IdentFuseLines-Draft-16x9` | the ink line as a draughtsman's drawing, Denzo 12 semitones lower |
@@ -447,14 +449,14 @@ Rendered files never go in git.
 
 **sesh-edit's intro.** The intro that sesh-edit prepends,
 `longform/src/sesh_edit/assets/intro/fuse-16x9.{webm,flac,json}`, is built from
-Fuse 16:9 (`IdentFuse-16x9`) by `bun run render:intro` (gitignored; run it once
-on a fresh clone, and after changing Fuse). It renders the ProRes master with
+Fuse-Drums 16:9 (`IdentFuse-Drums-16x9`) by `bun run render:intro` (gitignored; run it once
+on a fresh clone, and after changing Fuse or its drum track). The names stay `fuse-16x9.*`. It renders the ProRes master with
 `render:ident`, encodes the webm and flac, and writes `open_s` (frame 118 / 30).
 If the frame where the rings open moves, update `OPEN_FRAME` in
 `scripts/render-intro.ts`. `--reuse` skips the render if the `.mov` exists.
 
 **Sound and timing.** Each soundtrack is synthesised by a Python generator
-next to the code. The generator also writes the motion data the picture
+next to the code (except Fuse-Drums, a committed cut of a real track; see below). The generator also writes the motion data the picture
 reads. Both outputs are committed. After any timing change, re-run the
 generator so picture and sound stay locked:
 
@@ -474,6 +476,35 @@ the system Python. The scratch voice is `src/ident/scratchkit/denzo-waterhouse.w
 Denzo saying "Waterhouse", cut from the published Sessions video (YouTube
 mWNWTIGghjc). Ident-owned media lives in `public/ident/`. `public/audio/` stays
 for the other videos' sounds.
+
+### ReelOutro-YouTube (the reel's end bumper)
+
+`src/reel/outro/YouTubeOutro.tsx`, 1080×1920, 3.8 s (`YOUTUBE_OUTRO_FRAMES` =
+114). It goes on the end of a Sessions reel and sends people to the full
+interview: Fuse's scope, switched off. The trace carries the last of the
+clip's signal and goes flat; the flat line opens into the handle the way a
+tube comes on; on the hit the outline gives way to print (the line types in
+above it, the yellow rule and "WITH <guest>" land below); then the set is
+switched off: the type collapses into the line, the line into a dot, the dot
+goes. Black on the last frame, so a looping reel cuts cleanly back to its
+first frame. The handle and line stay inside x 120–960 and y 780–1130, clear
+of Instagram's caption block and right-hand rail (`src/reel/theme.ts`).
+
+Props: `{ handle, line, artist? }`, default `@Waterhouse_Studios` / "Full
+interview on YouTube". The handle is set upper-case in Rubik Mono One; one
+longer than the column breaks after its `_`/`.`/`-` (`src/reel/outro/layout.ts`).
+
+```sh
+bunx remotion render ReelOutro-YouTube out/reel-outro.mp4
+bunx remotion render ReelOutro-YouTube out/reel-outro.mp4 --props '{"artist":"Name"}'
+```
+
+Sound: `public/audio/reel-outro/youtube-tail.wav` (mono, 44.1 kHz, true peak
+−1.5 dBTP), made by `uv run src/reel/outro/gen-audio.py`: mains hum and a
+little static under the trace, the one hit cut from "hu" (the Fuse-Drums
+track, `public/ident/audio/fusedrums/mix.wav`) on the lock, sparse vinyl
+crackle and a run-out tick through the hold, a low thump as it switches off,
+a thin falling pip for the dot, silence from the last frames.
 
 ### Just the numbers
 
@@ -515,20 +546,26 @@ and [#11 here](https://github.com/JollyGrin/waterhouse-video/issues/11).
 
 ## Media for local compositions
 
-Some compositions play footage that is too large or too private for git
-(`public/session/`, `public/reel/` and `public/fort-riddim/` are gitignored).
-On a fresh clone they show a "Missing media" card naming each missing file
-instead of failing with a 404. Once the files are in place they render
-normally.
+Template media is committed when it is small and ours (#50; the rule is in
+AGENTS.md, "Media a template needs"), so every other composition renders on a
+fresh clone. The ones below play footage, photos or music that can't be public
+(`public/session/`, `public/reel/`, `public/fort-riddim/`, `public/artists/`
+and `public/audio/private/` are gitignored). `scripts/private-media.ts` lists
+those folders and `bun run test` fails on a template file that is neither
+committed nor listed there. The footage compositions show a "Missing media"
+card naming each missing file instead of failing with a 404. Once the files
+are in place they render normally.
 
 | Composition | Needs (under `public/`) | Where it comes from |
 |---|---|---|
 | SessionOpen | `session/head.mp4` | the first 5 s of a finished episode, cut with ffmpeg (AGENTS.md, "Session logo reveal") |
 | SessionClose | `session/tail.mp4` | the last 5 s, same way |
-| SessionReel | `reel/<slug>-cut.mp4` (the `cutFile` in `src/reel/data/current.json`) | `bun run reel src/reel/data/<slug>.reel.json`, lifted out of a cut episode (from sesh-edit: `<name>.clean.mp4`; see AGENTS.md, "Reels") |
+| SessionReel | `reel/<slug>-cut.mp4` (the `cutFile` in the reel's props; Studio's default is a made-up example, so it shows this card) | `bun run reel <name>.reel.json` lifts it out of a sesh-edit clean cut (`longform/README.md`, "A reel from an episode") |
 | FortRiddim | `fort-riddim/c1m.mp4`, `c1fx.mp4`, `c2fx.mp4`, `c3m.mp4`, `c3fx.mp4`, `soundtrack.wav`, `logo-white.png`, `poster/{boogie,disc,top,lineup,info}.png` | clips and soundtrack: `bun scripts/fort-riddim/make.ts --c1 IMG_2250.MOV --c2 IMG_2253.MOV --c3 IMG_2246.MOV` (or `FORT_RIDDIM_C1/_C2/_C3`) from Manuel's phone footage; logo and poster cut-outs: copied in by hand from the FORT RIDDIM poster artwork |
 | FortRiddimPromo | `fort-riddim/promo.mp4` | `bun run promo --source FORTRIDDIMPROMO.MP4` (or `FORT_RIDDIM_PROMO_SRC`), Manuel's disc animation |
 | FortRiddimShowcase | `fort-riddim/promo.mp4` | as FortRiddimPromo; `bun run showcase --source FORTRIDDIMPROMO.MP4` |
+| SessionPoster (Studio default) | `artists/timo-feyman.png` | `bun run poster --photo <path-or-url>` copies the photo in; any photo works for a preview |
+| WeeklyLineup with music | `audio/private/<track>.mp3` | `bun scripts/pick-track.ts` copies this week's bed from the music library folder (ask Dean); without it the video is silent |
 
 Ask whoever made the cut for the files, or regenerate them from the sources
 with the commands above.

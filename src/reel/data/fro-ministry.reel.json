@@ -7,6 +7,16 @@
   "artist": "FRO",
   "episodeLabel": "WATERHOUSE SESSIONS",
   "cta": "FULL EPISODE OUT NOW",
+  "intro": "none",
+  "outro": "card",
+  "_shots": "Crop windows into the 1920x1080 master (moved here from theme.ts in #55). floorY keeps them above the burned-in ticker.",
+  "floorY": 1046,
+  "shots": {
+    "froA": { "x": 364, "y": 95, "width": 534, "height": 950 },
+    "froB": { "x": 396, "y": 130, "width": 470, "height": 836 },
+    "hostA": { "x": 988, "y": 95, "width": 534, "height": 950 },
+    "hostB": { "x": 1020, "y": 130, "width": 470, "height": 836 }
+  },
   "segments": [
     {
       "start": 159.83,

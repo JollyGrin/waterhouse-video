@@ -16,7 +16,7 @@ Outputs, next to `-o` (default: next to the input):
 
 | file | what |
 |---|---|
-| `<name>.edited.mp4` | the edit: the [Fuse intro](#intro) then the interview, h264 + aac, captions burned in, one encode pass |
+| `<name>.edited.mp4` | the edit: the [Fuse-Drums intro](#intro) then the interview, h264 + aac, captions burned in, one encode pass |
 | `<name>.clean.mp4` | the same cut and audio with no intro, no captions and blank title cards: input for `sesh-upscale` (skip with `--no-clean`) |
 | `<name>.edited.srt` | the same captions, timed to the edited timeline |
 | `<name>.decisions.json` | every decision: cuts (with kind + context), keep segments, A/V offset (both checks), pre-take cut, review list, stats |
@@ -31,7 +31,7 @@ rendering and prints the plan.
 brew install ffmpeg          # any build works: captions are drawn with Pillow, no libass/drawtext needed
 curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync                      # pins Python 3.12 (see .python-version)
-(cd .. && bun run render:intro)   # before your first edit: builds the Fuse intro from the Remotion source
+(cd .. && bun run render:intro)   # before your first edit: builds the Fuse-Drums intro from the Remotion source
 ```
 
 The intro files (`src/sesh_edit/assets/intro/fuse-16x9.{webm,flac,json}`) are not in git:
@@ -94,8 +94,8 @@ followed by a title card also dips to black. Captions never run over an insert.
 
 ## Intro
 
-`<name>.edited.mp4` and `<name>.edited.1080p.mp4` open with **Fuse**, the Waterhouse Sessions
-ident (5 s, with alpha). The interview starts playing underneath at 3.933 s (Fuse frame 118),
+`<name>.edited.mp4` and `<name>.edited.1080p.mp4` open with **Fuse-Drums** (Fuse's picture on a
+drum track by Denzo's brother), the Waterhouse Sessions ident (5 s, with alpha). The interview starts playing underneath at 3.933 s (Fuse frame 118),
 when the ident's rings open onto it, so the output is 3.933 s + the edit. `<name>.clean.mp4`
 never gets the intro: it stays the upscale input, and `sesh-overlay` adds the intro at 1080p.
 
@@ -109,16 +109,20 @@ never gets the intro: it stays the upscale input, and `sesh-overlay` adds the in
   ident is on screen: a line that would start under it starts when it ends (5.0 s).
 - **decisions.json:** `intro` records the file, `open_s` and `level_lu` (relative level,
   default 0); `render.intro` records the measured LUFS and the applied gain, which
-  `sesh-overlay` reuses. `--from-decisions` renders the recorded intro unless `--no-intro`
+  `sesh-overlay` reuses while the intro still measures within 0.5 LU of the recorded
+  `intro_lufs`. If the intro was rebuilt since the edit (e.g. episodes edited with the old Fuse
+  soundtrack, before Fuse-Drums), it says so, ignores the recorded gain and matches the level
+  again to the recorded `speech_lufs`. `--from-decisions` renders the recorded intro unless `--no-intro`
   or `--intro` is given. Decisions from before the intro existed get the default Fuse.
 
 Asset: `src/sesh_edit/assets/intro/fuse-16x9.{webm,flac,json}` is built, not committed:
-`bun run render:intro` at the repo root renders the Remotion comp `IdentFuse-16x9`
-(`src/ident/Fuse.tsx`) to ProRes 4444, then
-`ffmpeg -i IdentFuse-16x9.mov -an -c:v libvpx-vp9 -pix_fmt yuva420p -crf 30 -b:v 0 -auto-alt-ref 0 fuse-16x9.webm`
+`bun run render:intro` at the repo root renders the Remotion comp `IdentFuse-Drums-16x9`
+(`src/ident/Fuse.tsx`: Fuse's picture on `public/ident/audio/fusedrums/mix.wav`)
+to ProRes 4444, then
+`ffmpeg -i IdentFuse-Drums-16x9.mov -an -c:v libvpx-vp9 -pix_fmt yuva420p -crf 30 -b:v 0 -auto-alt-ref 0 fuse-16x9.webm`
 (no colour flags: the master's tags pass through untouched),
-`ffmpeg -i IdentFuse-16x9.mov -vn -c:a flac fuse-16x9.flac`, and writes `fuse-16x9.json` with
-`open_s` = frame 118 / 30. To change the intro, edit the Fuse comp and re-run `render:intro`.
+`ffmpeg -i IdentFuse-Drums-16x9.mov -vn -c:a flac fuse-16x9.flac`, and writes `fuse-16x9.json` with
+`open_s` = frame 118 / 30. To change the intro, edit the Fuse comp or its drum track and re-run `render:intro`.
 The wheel bundles the files through hatch `artifacts` (pyproject.toml). ffmpeg only decodes
 VP9 alpha with `-c:v libvpx-vp9` before `-i` (the code does this).
 
@@ -165,6 +169,58 @@ prepends the intro recorded in the decisions (mixing its soundtrack over the cle
 the gain sesh-edit used; with no intro the audio is copied), and writes a matching `.srt`. Background and measurements:
 [docs/quality-and-upscaling.md](docs/quality-and-upscaling.md).
 
+## A reel from an episode
+
+"Make a reel from the best 30 seconds of the <guest> interview": a 20–30 s Instagram reel
+(1080×1920, 30 fps) with the Fuse-Drums intro in front, the clip cropped to 9:16 with big
+captions, and the YouTube end bumper ("Full interview on YouTube", @Waterhouse_Studios, "WITH <guest>"; `"outro": "card"` brings back the old end card). It is built in Remotion from the repo root (`SessionReel`,
+`scripts/reel/make-reel.ts`, #55); sesh-edit only supplies the episode.
+
+**What it needs:** the clean cut (`<name>.clean.mp4`, or its upscale
+`<name>.clean.x4plus1080p.mp4`, which reads better at 9:16) and `<name>.decisions.json`.
+The words come from the decisions file, mapped onto the clean cut the way sesh-edit places
+its own captions. Nothing is re-transcribed.
+
+**No clean cut on disk** (it was edited with `--no-clean`, or it was deleted): rebuild it
+from the decisions, without re-planning or re-editing. Write to a scratch folder so the
+finished edit isn't touched:
+
+```sh
+uv run sesh-edit <name>.decisions.json --from-decisions <name>.decisions.json --no-intro -o <scratch>/<name>.edited.mp4
+```
+
+That re-renders the same cut from the original recording (the decisions' `input`) and writes
+`<scratch>/<name>.clean.mp4`, plus an edited copy you can delete. It takes about as long as
+a normal render (a 27-minute 1080p25 interview: about 30 minutes on the GPU box). make-reel
+checks that the clean cut's length matches the decisions.
+
+**Steps** (from the repo root; keep everything for a real interview outside the repo, e.g.
+`C:\Users\<you>\Videos\sesh-out\reel\`):
+
+1. Pick the span. Spans are in **clean-cut seconds**. A time from the finished edit or its
+   `.srt` is clean time plus the intro offset (~3.93 s), and a quote is the safest anchor:
+   `bun scripts/reel/find-words.ts <name>.decisions.json "the quoted words" --near 12:34`
+   prints each match in clean and edit time with the words around it.
+2. Pick the crops: `bun scripts/reel/stills.ts <name>.reel.json` (or a video) writes stills
+   with a 100 px grid and every crop in `shots` drawn on, to `work/reel-stills/<slug>/`.
+   A crop is `{x, y, width, height}` in source pixels, 9:16 (height = width × 16 / 9);
+   a span without `shot` gets the centre crop.
+3. Write `<name>.reel.json` next to the episode (shape: `src/reel/data/example.reel.json`;
+   paths are relative to the file): `episode.clean`, `episode.decisions`, `segments`
+   (`start`, `end`, optional `shot`), `shots`, `artist`, `cta`, optional `wordFixes`
+   (`{t, w}` in clean time for a misheard word, `{t, drop: true}` to take a stutter out of
+   the captions; the sound is never changed).
+4. `bun run reel <name>.reel.json` → `<slug>.reel.mp4` next to it, about 2 minutes on the GPU
+   box. `--reuse-cut` re-renders without cutting again; `--cut-only` stops before the
+   render and prints a props file for Studio (`bun run dev -- --props=<file>`).
+
+**Sound:** the intro is gained to the clip's loudness, capped so its own true peak stays under
+−1 dBTP (as `intro.mix_audio` does for the 16:9 edit). The YouTube bumper's tail is pre-gained by
+the opposite of the master's gain, so it ends up at its designed level. Then the whole reel gets one gain to
+−14 LUFS and a 192 kHz true-peak limiter; the encoded file is measured and must land at
+−14 ± 0.5 LUFS and ≤ −1 dBTP. Remotion's file is 42.7 ms late on sound (AAC priming); that is
+trimmed before mastering (checked by cross-correlation: within 2 ms after).
+
 ## Machines & getting videos in (Dropbox → GPU box)
 
 Heavy work (transcription, the x4plus upscale) runs on the **GPU box**, the Windows 10 PC
@@ -181,9 +237,20 @@ GPU box layout:
 | `C:\Users\<you>\Videos\sesh-out\` | **outbox**: edits, decisions, upscales |
 | `C:\Users\<you>\tools\realesrgan\` | Real-ESRGAN ncnn-vulkan (Windows build, v0.2.5.0). User env `SESH_REALESRGAN` points here |
 
-ffmpeg, uv, git and the `claude` CLI are on the user PATH. torch there is the CPU build
-(the code picks MPS or CPU), so transcription is slower than on the Mac; upscaling uses the
-GPU through Vulkan.
+ffmpeg, uv, git and the `claude` CLI are on the user PATH. On Windows `uv sync` installs
+the CUDA build of torch (`[tool.uv.sources]` in `pyproject.toml`, cu124 wheels; macOS and
+Linux keep PyPI's torch), and transcription runs on the RTX 3070 in fp16. On a 2:42 test
+clip the speech model loaded in ~5 s (~20 s cold), transcribed in 7 s and aligned in 2 s:
+roughly 3 s of GPU time per minute of interview. Check with
+`uv run python -c "import torch; print(torch.cuda.is_available())"`; sesh-edit logs
+`asr on cuda (float16)`. Upscaling uses the GPU through Vulkan.
+
+Remotion needs Node 22 and the box's system Node is v14. Before `bun run render:intro`, put
+the portable one first on PATH in that PowerShell window:
+
+```powershell
+$env:PATH = "C:\Users\<you>\tools\node-v22.23.5-win-x64;C:\Users\<you>\.bun\bin;" + $env:PATH
+```
 
 ### Download from a Dropbox share link
 
@@ -203,6 +270,77 @@ On Mac/Linux it's the same `curl -L -o … "…&dl=1"`.
 - A share link is readable by anyone who has it. Expire or delete it after the pull.
 - Disk: C: had ~76 GB free on 2026-11-04. x4plus works in chunks (~4 GB of PNGs at a time),
   but don't run several upscales at once.
+
+### A batch of interviews: `sesh-batch`
+
+`sesh-batch` runs a list of share links through download → `sesh-edit --review` → approval →
+render → a small preview, one job after another, and remembers where each job got to. The
+manifest is a JSON file **outside the repo**: it holds share links. (`batch*.json`,
+`*.batch.json` and `*.status.json` are gitignored, and `scripts/no-tracked-private.test.ts`
+fails if a manifest or a real share link is committed.) E.g. `C:\Users\<you>\Videos\week47.batch.json`:
+
+```json
+{"jobs": [
+  {"name": "oscar", "url": "https://www.dropbox.com/scl/fi/<id>/oscar.mp4?rlkey=<key>&dl=0"},
+  {"name": "mira",  "url": "https://www.dropbox.com/scl/fi/<id>/mira.mov?rlkey=<key>&dl=0",
+   "args": ["--cut", "20:03-20:29", "--replace", "Waterhose=Waterhouse"], "upscale": true}
+]}
+```
+
+```powershell
+$m = "C:\Users\<you>\Videos\week47.batch.json"
+uv run sesh-batch $m                          # download + plan every job; render the approved ones
+uv run sesh-batch $m --approve oscar          # after reading oscar.review.txt (or --approve all)
+uv run sesh-batch $m --yes                    # no review stop: plan and render straight through
+uv run sesh-batch $m --approve-upscale mira   # after watching mira.upscale-compare.mp4
+uv run sesh-batch $m --status                 # where every job is
+```
+
+| job key | default | |
+|---|---|---|
+| `name` | required | file name for everything the job writes (letters, digits, `.` `_` `-`) |
+| `url` | required | Dropbox share link (`dl=0` becomes `dl=1`, `rlkey=` is kept), any http(s) link, or a local path |
+| `args` | `[]` | extra `sesh-edit` flags: `--cut`, `--replace`, `--move-to-front`, `--title-card`, `--av-offset`, ... |
+| `approved` | false | render without stopping for review |
+| `upscale` | off | `true`/`"x4plus"` or `"lanczos"`: after the preview, make a comparison sample and stop. The full upscale only starts after `--approve-upscale NAME`; there is no manifest key to skip that stop |
+| `sample_start` / `sample_duration` | 25% in / 25 s | where the sample comes from, in clean-cut time: seconds or `"mm:ss"`. x4plus takes ~1 s per frame on the 3070, so 25 s is ~10 min |
+
+Top-level `in_dir` / `out_dir` override `~\Videos\sesh-in` / `~\Videos\sesh-out`
+(`~/Movies/waterhouse/in` / `out` on a Mac).
+
+What each job writes into `out_dir`:
+
+| file | |
+|---|---|
+| `<name>.review.txt` | the plan and review list from `sesh-edit --review`: read it before approving |
+| `<name>.edited.mp4`, `.edited.srt`, `.decisions.json`, `.clean.mp4` | as from sesh-edit: Fuse-Drums intro, no outro, captions burned in. Rendered from the reviewed decisions (`--from-decisions`), so it is exactly the plan that was approved |
+| `<name>.preview.mp4` | the edit at 360p, mono audio, ~180 kbit/s (~1.3 MB per minute): for checking timing and sound |
+| `<name>.upscale-compare.mp4` | only with `upscale`: the sample side by side (centre half of the frame), the original scaled up plainly on the left, the upscale on the right |
+| `<name>.edited.1080p.mp4` | only after `--approve-upscale`: `sesh-upscale` + `sesh-overlay` |
+| `<name>.log` | everything the tools printed |
+
+State is in `<manifest>.status.json` beside the manifest: `queued`, `downloading`, `planning`,
+`awaiting-review`, `rendering`, `previewing`, `upscale-sample`, `awaiting-upscale-approval`,
+`upscaling`, `done` or `failed` (with the error). Re-running the manifest skips finished
+work: a download from the same link that is there and readable, a plan made with the same
+link and `args`, a render of that plan. A failed job is recorded and the others carry on;
+re-run to retry it (a broken-off download resumes where the server allows). Changing a job's
+`args` re-plans it (cached transcript, ~40 s) and waits for a new approval. Correcting its
+`url` deletes the old download (and any partial one: `<name>.source` in `in_dir` records
+which link a file came from), downloads again and re-plans. Changing `upscale` makes a new
+sample, and a full upscale whose cut or method changed starts from scratch instead of
+resuming the old frames. `--yes` never approves an upscale. `--cleanup` deletes each job's
+`.work/` cache after its preview (and the clean cut, unless the job is upscaled): saves disk,
+but a later re-plan transcribes again. `--only NAME` runs one job.
+
+One run at a time works on a manifest: it holds `<manifest>.lock` (its pid). While it runs,
+`--approve` / `--approve-upscale` from a second window only record the approval and exit; the
+running batch picks it up before it finishes. Any other second run is refused. A lock left
+by a crashed or closed run is taken over automatically. `--status` always works.
+
+Run it from a session that stays open (a T3 thread on the GPU box, or a held-open ssh): a
+detached `Start-Process` over ssh dies. Pull previews to the Mac with
+`scp <gpu-box>:Videos/sesh-out/<name>.preview.mp4 ~/Movies/waterhouse/out/`.
 
 ### Full run on the GPU box (trim → upscale → caption)
 

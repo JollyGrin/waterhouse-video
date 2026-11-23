@@ -6,6 +6,16 @@
   "artist": "BOOGIE",
   "episodeLabel": "WATERHOUSE SESSIONS",
   "cta": "CATCH HIM LIVE · FORT RIDDIM · 10.10",
+  "intro": "none",
+  "outro": "card",
+  "_shots": "Crop windows into the 1920x1080 master (moved here from theme.ts in #55). floorY keeps them above the burned-in ticker.",
+  "floorY": 1046,
+  "shots": {
+    "leftHostA": { "x": 380, "y": 95, "width": 534, "height": 950 },
+    "leftHostB": { "x": 420, "y": 130, "width": 470, "height": 836 },
+    "boogieA": { "x": 1080, "y": 95, "width": 534, "height": 950 },
+    "boogieB": { "x": 1110, "y": 130, "width": 470, "height": 836 }
+  },
   "segments": [
     {
       "start": 930.04,
