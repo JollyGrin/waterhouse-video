@@ -13,6 +13,7 @@ import { WhMark, MARK_ASPECT } from "../session/WhMark";
 import { FUSE_FRAMES, FuseDrums } from "../ident/Fuse";
 import { YouTubeOutro, YOUTUBE_OUTRO_DEFAULTS, YOUTUBE_OUTRO_FRAMES } from "./outro/YouTubeOutro";
 import { ReelCaptions } from "./ReelCaptions";
+import { YouTubeBanner } from "./YouTubeBanner";
 import type { Crop, SourceSize } from "./crop";
 import { BUG, END_CARD_SECONDS, FPS, HEIGHT, PUSH, WIDTH } from "./theme";
 
@@ -32,6 +33,8 @@ export type ReelIntro = "fuse-drums" | "none";
  * artist, CTA), kept as a fallback.
  */
 export type ReelOutro = "youtube" | "card" | "none";
+/** "youtube": a "full interview on YouTube" banner over the whole clip (YouTubeBanner.tsx). Default "none". */
+export type ReelBanner = "youtube" | "none";
 
 export type SessionReelProps = {
   /** The concatenated cut, relative to public/ (reel/<slug>-cut.mp4): still 16:9, still the full two-shot. */
@@ -49,6 +52,8 @@ export type SessionReelProps = {
   outro: ReelOutro;
   /** Gain on the YouTube bumper's sound (make-reel sets it; see outroGainDb there). */
   outroGainDb?: number;
+  /** A banner over the clip pointing at the full interview. Default "none". */
+  banner?: ReelBanner;
   /** The guest, in capitals: the bumper's "WITH" line and the old card's name. */
   artist: string;
   episodeLabel: string;
@@ -165,11 +170,11 @@ const EndCard: React.FC<{
 
 /** The clip: cropped picture, caption floor, captions and the channel bug. */
 const Clip: React.FC<
-  Pick<SessionReelProps, "cutFile" | "source" | "segments" | "captions" | "pictureFrames"> & {
+  Pick<SessionReelProps, "cutFile" | "source" | "segments" | "captions" | "pictureFrames" | "banner"> & {
     /** Clip frames still under the intro: captions and bug wait until it has gone. */
     holdFrames: number;
   }
-> = ({ cutFile, source, segments, captions, pictureFrames, holdFrames }) => {
+> = ({ cutFile, source, segments, captions, pictureFrames, holdFrames, banner }) => {
   const frame = useCurrentFrame();
   const crop = frameCrop(Math.min(frame, pictureFrames - 1), segments, source);
   const overlays = frame >= holdFrames;
@@ -210,6 +215,7 @@ const Clip: React.FC<
       {overlays ? (
         <>
           <ReelCaptions words={captions} />
+          {banner === "youtube" ? <YouTubeBanner frame={frame - holdFrames} /> : null}
           <div
             style={{
               position: "absolute",
