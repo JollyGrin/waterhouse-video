@@ -194,6 +194,20 @@ That re-renders the same cut from the original recording (the decisions' `input`
 a normal render (a 27-minute 1080p25 interview: about 30 minutes on the GPU box). make-reel
 checks that the clean cut's length matches the decisions.
 
+**On another computer**, where the recording lives somewhere else: pass the recording
+instead of the decisions file as the first argument. It replaces the path stored in the
+decisions, after a check that its length matches:
+
+```sh
+uv run sesh-edit <recording>.mp4 --from-decisions <name>.decisions.json --no-intro -o <scratch>/<name>.edited.mp4
+```
+
+**A reel a teammate made** ("render the reel Denzo made") comes as a folder outside the
+repo with the `.reel.json`, the episode's `.decisions.json` and a `README.txt`, with the
+reel's `episode.clean` pointing at `rebuild/<name>.clean.mp4`. The recording is not in it;
+whoever renders has it already. Rebuild the clean cut into `<folder>/rebuild/` as above,
+then `bun run reel <folder>/<slug>.reel.json`.
+
 **Steps** (from the repo root; keep everything for a real interview outside the repo, e.g.
 `C:\Users\<you>\Videos\sesh-out\reel\`):
 

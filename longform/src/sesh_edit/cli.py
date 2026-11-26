@@ -232,7 +232,8 @@ def step_avsync(work: Path, src: str, info: dict, audio16k: np.ndarray, words: l
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="sesh-edit", description=__doc__)
-    ap.add_argument("input", help="input video, or a .decisions.json with --from-decisions")
+    ap.add_argument("input", help="input video, or a .decisions.json with --from-decisions "
+                    "(a video here replaces the recording path stored in the decisions)")
     ap.add_argument("-o", "--output", help="output mp4 (default: <input>.edited.mp4)")
     ap.add_argument("--review", action="store_true", help="plan only: print decisions, don't render")
     ap.add_argument("--from-decisions", metavar="JSON", help="render from an existing (possibly hand-edited) decisions.json")
@@ -274,7 +275,17 @@ def main(argv=None) -> int:
     decisions_in = None
     if args.from_decisions:
         decisions_in = json.loads(Path(args.from_decisions).read_text())
-        src = decisions_in["input"]
+        if Path(args.input).suffix.lower() == ".json":
+            src = decisions_in["input"]
+        else:
+            # A recording given by hand wins over the decisions' own path, so an edit made on one
+            # computer re-renders on another where the same recording lives somewhere else.
+            want = decisions_in.get("stats", {}).get("input_duration_s")
+            got = media.probe(src)["duration"]
+            if want is not None and abs(got - want) > 0.5:
+                raise SystemExit(f"{Path(src).name} is {got:.2f}s but these decisions were made on a "
+                                 f"{want:.2f}s recording: not the same file.")
+            decisions_in["input"] = src
     inp = Path(src)
     out_mp4 = Path(args.output).expanduser().resolve() if args.output else inp.with_name(inp.name + ".edited.mp4")
     base = out_mp4.with_suffix("")
