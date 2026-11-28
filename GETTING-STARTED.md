@@ -350,6 +350,9 @@ say), share it like this instead:
    If something is missing or different (most often: the recording is a
    different file with the same name), it says exactly what, and renders
    nothing.
+4. Changed something (a caption, a span)? Say *"share it back with
+   Denzo"*: the same folder is updated, and anything else in it (a copy of
+   the recording, the renders) stays.
 
 The share folder names the guest and quotes the interview: it's private, it
 never goes in the repo.
