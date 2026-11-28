@@ -167,8 +167,8 @@ Claude asks if something is missing (which artist, which date, which file).
 | **"Run these 8 Dropbox videos on the GPU box"** (paste the links, one per guest) | Claude writes a batch list on the GPU box (never in the repo: the links are private), downloads every video, and makes each edit's plan. You read the plans, say which are fine, and it renders those with the Fuse-Drums intro and captions, plus a small preview of each. One that fails doesn't stop the others; asking again carries on where it stopped. No 1080p unless you ask for it per video, and then you first get a 25-second before/after sample to approve. | `C:\Users\<you>\Videos\sesh-out\<name>.edited.mp4` and `<name>.preview.mp4` on the GPU box |
 | **"Make a new stinger: a cassette tape rewinding into the logo"** | Claude builds it in the house style, gives it a one-word name (say, *Rewind*), adds it to [TEMPLATES.md](TEMPLATES.md) and tells you the name. Share the name in WhatsApp so others can ask for "the Rewind stinger". | `out/Bumper-rewind.webm` once rendered |
 | **"Make a reel from the best 30 seconds of the Boogie interview"** (or name the bit: *"from 12:40, where he says '...'"*) | Claude reads the edit's captions, proposes a 20–30 second span (or finds the one you quoted), and renders an Instagram reel: the Fuse-Drums intro, the clip cropped to 9:16 cutting between the speakers, big captions and the YouTube end bumper ("full interview on YouTube"), at Instagram loudness. Needs the edited interview's clean cut and its plan file. | `<name>.reel.mp4` next to the interview's outputs |
-| **"Share this reel with Dean"** (or *"send Denzo this edit"*) | Claude makes a **share folder**: everything needed to render your reel or edit again, except the raw recording (Dean has his own copy). Your work must be saved and backed up online first; Claude does that. Add the recording's Dropbox link if you have it, so it can be downloaded again. | the shared Dropbox folder, or a folder you then send as a Dropbox link |
-| **"Render what Denzo shared"** (give the folder) | Claude checks everything first and either renders exactly the same reel or edit, or tells you in plain words what's missing (usually: your copy of the raw recording, or it's a different file with the same name). | `rebuild/` inside that folder |
+| **"Yes, share it with Dean"** (after a render, when Claude asks) or *"share this reel with Dean"* | Every render already packed a **share folder** for that interview: the edit and all its reels, everything needed to render them again except the raw recording (Dean has his own copy). Saying yes puts it in the shared Dropbox folder. Your work must be saved and backed up online first; Claude does that. Add the recording's Dropbox link if you have it, so it can be downloaded again. | the shared Dropbox folder (`<interview>/`) |
+| **"Render what Denzo shared"** (give the folder) | Claude checks everything first and renders exactly the same edit and reels (or *"just the reel"*), or tells you in plain words what's missing (usually: your copy of the raw recording, or it's a different file with the same name). | `rebuild/` inside that folder |
 
 Every template has a name you can say: *Fuse*, *door*, *PullUp*, ... The
 full list is [TEMPLATES.md](TEMPLATES.md).
@@ -336,23 +336,35 @@ ask Claude to *"bring my branch up to date with main"*).
 
 Rendered videos go by Dropbox. But when someone should be able to **change
 and render your reel or edit again** (Dean fixing a caption on your reel,
-say), share it like this instead:
+say), share it like this. Every interview gets a full edit and a short
+reel, and both travel together in one **share folder** per interview.
 
-1. You say *"share this reel with Dean"*. Claude saves your work online,
-   then makes a share folder: your reel's settings, the edit's plan, any
-   extra clips, and a note of exactly which version of the code made it.
-   The raw recording is **not** in it: you both have that already.
-2. The folder lands in the shared Dropbox folder (Claude asks where the
-   first time and remembers it on your computer), or you send its Dropbox
-   link on WhatsApp.
-3. Dean says *"render what Denzo shared"*. Claude checks the code, the
-   copy of the recording on Dean's computer and every file, then renders.
+1. **It's packed for you.** Every time Claude renders a reel or an edit,
+   it also packs that interview's share folder on your computer: the
+   edit's plan, every reel's settings, any extra clips, and a note of
+   exactly which version of the code made it. The raw recording is **not**
+   in it: you both have that already. Nothing is sent anywhere yet.
+2. **Claude asks once:** *"Share it with Dean? (bundled already, nothing is
+   sent until you say yes)"*. Say yes and it goes into the shared Dropbox
+   folder (Claude asks where that is the first time and remembers it on
+   your computer). Say no and nothing happens; you can say *"share it"*
+   later.
+3. **Tell Dean on WhatsApp** which folder it is (Claude gives you the
+   name).
+4. Dean says *"render what Denzo shared"*. Claude checks the code, the
+   copy of the recording on Dean's computer and every file, then renders
+   the edit and every reel in the folder (or just the one Dean asks for).
    If something is missing or different (most often: the recording is a
    different file with the same name), it says exactly what, and renders
    nothing.
-4. Changed something (a caption, a span)? Say *"share it back with
-   Denzo"*: the same folder is updated, and anything else in it (a copy of
-   the recording, the renders) stays.
+5. Changed something (a caption, a span)? Say *"share it back with
+   Denzo"*: the same folder is updated. Reels someone else added there
+   stay, and so does anything else in it (a copy of the recording, the
+   renders).
+
+If your work isn't saved and backed up online yet, Claude does that first:
+a share points at an exact version of the code, so your teammate must be
+able to get it.
 
 The share folder names the guest and quotes the interview: it's private, it
 never goes in the repo.
