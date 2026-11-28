@@ -75,31 +75,77 @@ export type Job = {
   clean?: CleanSpec;
   /** Version 1: the sharer's own render, for comparison only (bit-identical output isn't promised). */
   reference?: Output;
-  /** Version 2: the full edit (always there: every episode gets one). */
-  edit?: { reference?: Output };
+  /** Version 2: the full edit (every episode gets one). */
+  edit?: EditEntry;
   /** Version 2: every reel shared from this episode, by slug: reels/<slug>.reel.json. */
-  reels?: Record<string, { clean: CleanSpec; reference?: Output }>;
+  reels?: Record<string, ReelEntry>;
 };
 
+/**
+ * Each part carries the commit its own render was made with (#62 review): sesh-edit
+ * records it in the decisions, make-reel in <output>.render.json. A part rendered from
+ * unsaved code, or before this was recorded, gets the share's commit and `commitAssumed`.
+ */
+export type PartCommit = { commit?: string; commitAssumed?: boolean };
+export type EditEntry = PartCommit & {
+  reference?: Output;
+  /** Why the edit isn't in this bundle (its intro changed or is missing); the reels still are. */
+  skipped?: string;
+  /** The intro's fingerprint (introDigest of its files), as recorded when the edit was rendered. */
+  intro?: string;
+  /** The edit was rendered before intros were fingerprinted: today's intro is assumed. */
+  introUnverified?: boolean;
+};
+export type ReelEntry = PartCommit & { clean: CleanSpec; reference?: Output };
+
 /** One reel in a bundle, whatever its version. */
-export type ReelPart = { slug: string; def: string; clean: CleanSpec; reference?: Output };
+export type ReelPart = { slug: string; def: string; clean: CleanSpec; reference?: Output; commit: string; commitAssumed: boolean };
 
 /** What a bundle renders: the edit (with its intro) and/or reels, the same for both versions. */
-export type Parts = { edit: boolean; editReference?: Output; reels: ReelPart[]; noIntro: boolean };
+export type Parts = {
+  edit: boolean;
+  editReference?: Output;
+  /** The commit whose sesh-edit makes the clean cut (and the edit). */
+  editCommit: string;
+  editCommitAssumed: boolean;
+  editSkipped?: string;
+  introUnverified?: boolean;
+  reels: ReelPart[];
+  noIntro: boolean;
+};
 
 export function parts(job: Job): Parts {
+  const repo = job.repo.commit;
   if (job.version === 1) {
+    const base = { editCommit: repo, editCommitAssumed: false };
     if (job.kind === "reel")
-      return { edit: false, noIntro: true, reels: [{ slug: job.name, def: `${job.name}.reel.json`, clean: job.clean!, reference: job.reference }] };
-    return { edit: true, editReference: job.reference, noIntro: false, reels: [] };
+      return {
+        ...base,
+        edit: false,
+        noIntro: true,
+        reels: [{ slug: job.name, def: `${job.name}.reel.json`, clean: job.clean!, reference: job.reference, commit: repo, commitAssumed: false }],
+      };
+    return { ...base, edit: true, editReference: job.reference, noIntro: false, reels: [] };
   }
+  const e = job.edit ?? {};
   return {
-    edit: true,
-    editReference: job.edit?.reference,
-    noIntro: false,
+    edit: !e.skipped,
+    editReference: e.reference,
+    editCommit: e.commit ?? repo,
+    editCommitAssumed: !e.commit || !!e.commitAssumed,
+    editSkipped: e.skipped,
+    introUnverified: e.introUnverified,
+    noIntro: !!e.skipped,
     reels: Object.entries(job.reels ?? {})
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([slug, r]) => ({ slug, def: reelDefPath(slug), clean: r.clean, reference: r.reference })),
+      .map(([slug, r]) => ({
+        slug,
+        def: reelDefPath(slug),
+        clean: r.clean,
+        reference: r.reference,
+        commit: r.commit ?? repo,
+        commitAssumed: !r.commit || !!r.commitAssumed,
+      })),
   };
 }
 
@@ -162,6 +208,20 @@ export function fingerprint(file: string, chunk = FINGERPRINT_CHUNK, read: typeo
     closeSync(fd);
   }
   return hash.digest("hex");
+}
+
+/**
+ * An intro's fingerprint: its video and its sidecars (.json open point, .flac / .wav sound),
+ * by name and sha256. sesh_edit/share_hook.py computes the same at render time.
+ */
+export function introDigest(file: string): string {
+  const stem = basename(file).replace(/\.[^.]+$/, "");
+  const names = [basename(file), ...[".json", ".flac", ".wav"].map((e) => stem + e)].filter((n, i, all) => all.indexOf(n) === i);
+  const lines = names
+    .filter((n) => existsSync(join(dirname(file), n)))
+    .sort()
+    .map((n) => `${n}:${sha256File(join(dirname(file), n))}`);
+  return createHash("sha256").update(lines.join("\n")).digest("hex");
 }
 
 /* ---------- probing ---------- */
@@ -234,6 +294,8 @@ export type SeshDecisionsLite = {
   stats?: { input_duration_s?: number };
   inserts?: { kind: string; path?: string }[];
   intro?: { file: string } | null;
+  /** Written by sesh-edit's render: the code that made it, and its intro's fingerprint (#62). */
+  render?: { code?: { commit: string; dirty: boolean } | null; intro_digest?: string | null } | null;
 };
 
 /* ---------- the code and the tools ---------- */
@@ -299,7 +361,7 @@ export function reelPrivateMedia(root = ROOT): string[] {
 /* ---------- per-machine config ---------- */
 
 /** share.local.json at the repo root (gitignored): where this computer keeps bundles and recordings. */
-export type LocalConfig = { bundles?: string; recordings?: string[] };
+export type LocalConfig = { bundles?: string; recordings?: string[]; rebuilds?: string };
 export const CONFIG_FILE = "share.local.json";
 
 export function readConfig(root = ROOT): LocalConfig {
@@ -375,6 +437,10 @@ export function jobProblems(job: Partial<Job>): string[] {
     for (const [path, role] of need)
       if (!job.files.some((f) => f.path === path && f.role === role)) out.push(`no ${role} entry ${path}`);
   }
+  const sha = /^[0-9a-f]{40}$/;
+  if (job.edit?.commit !== undefined && !sha.test(job.edit.commit)) out.push("the edit's commit");
+  for (const [slug, r] of Object.entries(job.version === JOB_VERSION ? job.reels ?? {} : {}))
+    if (r?.commit !== undefined && !sha.test(r.commit)) out.push(`reel ${slug}'s commit`);
   const cleans: [string, CleanSpec | undefined][] =
     job.version === 1 ? (job.kind === "reel" ? [[job.name ?? "", job.clean]] : []) : Object.entries(job.reels ?? {}).map(([k, r]) => [k, r?.clean]);
   for (const [slug, c] of cleans)
@@ -398,7 +464,14 @@ export const inBundle = (bundle: string, rel: string) => resolve(bundle, ...rel.
 
 /* ---------- preflight ---------- */
 
-export type Check = { label: string; ok: boolean; warn?: boolean; detail?: string[] };
+export type Check = {
+  label: string;
+  ok: boolean;
+  warn?: boolean;
+  detail?: string[];
+  /** A code check: the commit, and the parts ("edit", reel slugs) that need it. */
+  code?: { commit: string; parts: string[] };
+};
 
 export type PreflightOptions = {
   recording?: string;
@@ -406,12 +479,14 @@ export type PreflightOptions = {
   config?: LocalConfig;
   probe?: (file: string) => RecordingInfo;
   tools?: Tools;
+  /** Only these parts ("edit", reel slugs) are about to be rendered: code checks for the others are left out. */
+  select?: string[];
 };
 
 /** Every check, in report order. Not reproducible = any check with ok false and no warn. */
 export function preflight(bundle: string, job: Job, opts: PreflightOptions = {}): { checks: Check[]; recording: string | null } {
   const root = opts.root ?? ROOT;
-  const checks: Check[] = [codeCheck(job.repo.commit, root)];
+  const checks: Check[] = partCodeChecks(job, root, opts.select);
 
   const recording = opts.recording ? resolve(opts.recording) : findRecording(job.recording, recordingFolders(bundle, opts.config ?? readConfig(root)));
   if (!recording) {
@@ -442,7 +517,11 @@ export function preflight(bundle: string, job: Job, opts: PreflightOptions = {})
     else checks.push({ label: `${f.role} ${f.path}`, ok: true });
   }
 
-  const reels = parts(job).reels;
+  const p = parts(job);
+  const reels = p.reels.filter((r) => !opts.select?.length || opts.select.includes(r.slug));
+  if (p.editSkipped) checks.push({ label: "the edit isn't in this bundle", ok: false, warn: true, detail: [p.editSkipped] });
+  if (p.introUnverified)
+    checks.push({ label: "the edit's intro", ok: false, warn: true, detail: ["rendered before intros were fingerprinted: assumed to be the one in the bundle"] });
   for (const c of distinctCleans(reels)) checks.push(cleanCheck(c));
   if (reels.length) checks.push(packagesCheck(root));
   checks.push(toolsCheck(job.tools, opts.tools ?? toolVersions()));
@@ -461,9 +540,56 @@ export const CODE_EXCLUDES = [
   "scripts/share/preflight.ts",
 ];
 
-/** Is the pinned commit here, and does this checkout's code match it? */
-export function codeCheck(commit: string, root = ROOT): Check {
-  const label = `code at ${commit.slice(0, 7)}`;
+/**
+ * Which code a part's render depends on. The edit (and every clean cut) is sesh-edit,
+ * `longform/` (its intro is pinned by fingerprint); a reel is everything else (Remotion,
+ * scripts/reel/, its media). `all` is both (a version 1 bundle's single commit, still split).
+ */
+export type CodeScope = "all" | "edit" | "reel";
+const SCOPE_PATHS: Record<CodeScope, string[]> = {
+  all: ["."],
+  edit: ["longform"],
+  reel: [".", ":(exclude)longform/**"],
+};
+const scopePathspec = (scope: CodeScope) => [...SCOPE_PATHS[scope], ...CODE_EXCLUDES.map((p) => `:(exclude)${p}`)];
+
+/** HEAD, and whether the working tree's render code for `scope` differs from it (recorded at render time). */
+export function renderVersion(scope: CodeScope, root = ROOT): { commit: string; dirty: boolean } | null {
+  const head = git(["rev-parse", "HEAD"], root);
+  if (!head.ok || !/^[0-9a-f]{40}$/.test(head.out)) return null;
+  const diff = git(["diff", "--name-only", "HEAD", "--", ...scopePathspec(scope)], root);
+  return { commit: head.out, dirty: !diff.ok || diff.out !== "" };
+}
+
+/** A code check per commit the selected parts were rendered with, plus a warning per assumed one. */
+export function partCodeChecks(job: Job, root = ROOT, select?: string[]): Check[] {
+  const p = parts(job);
+  const checks: Check[] = [];
+  // the clean cut is always rebuilt, so sesh-edit's code always counts
+  const edit = codeCheck(p.editCommit, root, "edit", `code for the edit (sesh-edit) at ${p.editCommit.slice(0, 7)}`);
+  checks.push({ ...edit, code: { commit: p.editCommit, parts: ["edit"] } });
+  const byCommit = new Map<string, string[]>();
+  for (const r of p.reels) if (!select?.length || select.includes(r.slug)) byCommit.set(r.commit, [...(byCommit.get(r.commit) ?? []), r.slug]);
+  for (const [commit, slugs] of byCommit) {
+    const c = codeCheck(commit, root, "reel", `code for reel ${slugs.join(", ")} at ${commit.slice(0, 7)}`);
+    checks.push({ ...c, code: { commit, parts: slugs } });
+  }
+  const assumed = [
+    ...(p.edit && p.editCommitAssumed ? ["the edit"] : []),
+    ...p.reels.filter((r) => r.commitAssumed && (!select?.length || select.includes(r.slug))).map((r) => `reel ${r.slug}`),
+  ];
+  if (assumed.length && job.version !== 1)
+    checks.push({
+      label: "code versions",
+      ok: false,
+      warn: true,
+      detail: [`${assumed.join(", ")}: no code version recorded when rendered (an older render, or unsaved code); assumed the share's, ${job.repo.commit.slice(0, 7)}`],
+    });
+  return checks;
+}
+
+/** Is the pinned commit here, and does this checkout's code (for `scope`) match it? */
+export function codeCheck(commit: string, root = ROOT, scope: CodeScope = "all", label = `code at ${commit.slice(0, 7)}`): Check {
   if (!git(["cat-file", "-e", `${commit}^{commit}`], root).ok)
     return {
       label,
@@ -473,7 +599,7 @@ export function codeCheck(commit: string, root = ROOT): Check {
   const head = git(["rev-parse", "HEAD"], root).out;
   // Working tree against the commit, so unsaved edits count too. Docs, tests and these
   // share scripts can't change a render.
-  const diff = git(["diff", "--name-only", commit, "--", ".", ...CODE_EXCLUDES.map((p) => `:(exclude)${p}`)], root);
+  const diff = git(["diff", "--name-only", commit, "--", ...scopePathspec(scope)], root);
   const files = diff.out ? diff.out.split("\n") : [];
   if (files.length === 0) return { label, ok: true, detail: head === commit ? undefined : ["checked out elsewhere, but the code is the same"] };
   return {
@@ -555,7 +681,7 @@ export function packagesCheck(root = ROOT): Check {
  * What rebuild/ was made from; --reuse-clean reuses the clean cut only when this matches,
  * and an upscale only when it's also listed in `upscales`.
  */
-export type RebuildStamp = { decisions: string; recording: string; intro: boolean; upscales: string[] };
+export type RebuildStamp = { decisions: string; recording: string; intro: boolean; introDigest: string | null; upscales: string[] };
 
 export const STAMP_FILE = "rebuild.json";
 
@@ -563,7 +689,8 @@ export const STAMP_FILE = "rebuild.json";
 export function readStamp(rebuild: string, want: Omit<RebuildStamp, "upscales">): RebuildStamp | null {
   try {
     const got = JSON.parse(readFileSync(join(rebuild, STAMP_FILE), "utf8")) as RebuildStamp;
-    const same = got.decisions === want.decisions && got.recording === want.recording && got.intro === want.intro;
+    const same =
+      got.decisions === want.decisions && got.recording === want.recording && got.intro === want.intro && (got.introDigest ?? null) === want.introDigest;
     return same ? { ...got, upscales: Array.isArray(got.upscales) ? got.upscales : [] } : null;
   } catch {
     return null;

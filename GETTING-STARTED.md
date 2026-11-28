@@ -168,7 +168,7 @@ Claude asks if something is missing (which artist, which date, which file).
 | **"Make a new stinger: a cassette tape rewinding into the logo"** | Claude builds it in the house style, gives it a one-word name (say, *Rewind*), adds it to [TEMPLATES.md](TEMPLATES.md) and tells you the name. Share the name in WhatsApp so others can ask for "the Rewind stinger". | `out/Bumper-rewind.webm` once rendered |
 | **"Make a reel from the best 30 seconds of the Boogie interview"** (or name the bit: *"from 12:40, where he says '...'"*) | Claude reads the edit's captions, proposes a 20–30 second span (or finds the one you quoted), and renders an Instagram reel: the Fuse-Drums intro, the clip cropped to 9:16 cutting between the speakers, big captions and the YouTube end bumper ("full interview on YouTube"), at Instagram loudness. Needs the edited interview's clean cut and its plan file. | `<name>.reel.mp4` next to the interview's outputs |
 | **"Yes, share it with Dean"** (after a render, when Claude asks) or *"share this reel with Dean"* | Every render already packed a **share folder** for that interview: the edit and all its reels, everything needed to render them again except the raw recording (Dean has his own copy). Saying yes puts it in the shared Dropbox folder. Your work must be saved and backed up online first; Claude does that. Add the recording's Dropbox link if you have it, so it can be downloaded again. | the shared Dropbox folder (`<interview>/`) |
-| **"Render what Denzo shared"** (give the folder) | Claude checks everything first and renders exactly the same edit and reels (or *"just the reel"*), or tells you in plain words what's missing (usually: your copy of the raw recording, or it's a different file with the same name). | `rebuild/` inside that folder |
+| **"Render what Denzo shared"** (give the folder) | Claude checks everything first and renders exactly the same edit and reels (or *"just the reel"*), or tells you in plain words what's missing (usually: your copy of the raw recording, or it's a different file with the same name). | a rebuild folder on your computer (Claude says where; never inside the shared Dropbox folder) |
 
 Every template has a name you can say: *Fuse*, *door*, *PullUp*, ... The
 full list is [TEMPLATES.md](TEMPLATES.md).
@@ -353,7 +353,8 @@ reel, and both travel together in one **share folder** per interview.
    name).
 4. Dean says *"render what Denzo shared"*. Claude checks the code, the
    copy of the recording on Dean's computer and every file, then renders
-   the edit and every reel in the folder (or just the one Dean asks for).
+   the edit and every reel in the folder (or just the one Dean asks for),
+   each with the exact version of the code it was first made with.
    If something is missing or different (most often: the recording is a
    different file with the same name), it says exactly what, and renders
    nothing.

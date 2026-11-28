@@ -28,15 +28,15 @@ export function parseBundleArgs(argv: string[], usage: string) {
 }
 
 /** Prints the report; true when reproducible. */
-export function runPreflight(bundle: string, recording?: string) {
+export function runPreflight(bundle: string, recording?: string, select?: string[]) {
   const job = readJob(bundle);
   const p = parts(job);
   const what = [p.edit ? "the edit" : "", ...p.reels.map((r) => `reel ${r.slug}`)].filter(Boolean).join(", ");
   console.log(`Share "${job.episode}": ${what}${job.by ? `, by ${job.by}` : ""}, ${job.created.slice(0, 10)}\n`);
-  const res = preflight(bundle, job, { recording });
+  const res = preflight(bundle, job, { recording, select });
   const report = formatReport(res.checks);
   console.log(report.text);
-  return { job, recording: res.recording, reproducible: report.reproducible };
+  return { job, recording: res.recording, reproducible: report.reproducible, checks: res.checks };
 }
 
 if (/preflight\.ts$/.test(process.argv[1] ?? "")) {

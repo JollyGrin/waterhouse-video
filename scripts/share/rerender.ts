@@ -24,7 +24,9 @@
 
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { ROOT } from "../template-media";
 import { measureLoudness } from "../reel/make-reel";
 import {
@@ -38,8 +40,12 @@ import {
   safeRelPath,
   sha256File,
   STAMP_FILE,
+  readConfig,
+  type Check,
   type CleanSpec,
   type Job,
+  type LocalConfig,
+  type ReelPart,
   type Output,
   type Parts,
   type RebuildStamp,
@@ -81,11 +87,13 @@ async function main() {
   // The reels render with this checkout's node packages: make them exactly what bun.lock says first.
   if (todo.reels.length) run(["bun", "install", "--frozen-lockfile"], ROOT);
 
-  const { job, recording, reproducible } = runPreflight(bundle, args.recording);
-  if (!reproducible || !recording) throw new Error("\nNot rendering: fix what preflight lists first.");
+  const select = args.only.length ? [...(todo.edit ? ["edit"] : []), ...todo.reels.map((r) => r.slug)] : undefined;
+  const { job, recording, reproducible, checks } = runPreflight(bundle, args.recording, select);
+  if (!reproducible || !recording) throw new Error(`\n${notRendering(checks, bundle, args.recording)}`);
 
-  const rebuild = join(bundle, "rebuild");
+  const rebuild = rebuildDir(bundle, job.episode, readConfig(ROOT));
   mkdirSync(rebuild, { recursive: true });
+  console.log(`\nRebuilding into ${rebuild}`);
 
   // Private media the render reads from public/ (preflight made sure ours is absent or the same).
   for (const f of job.files)
@@ -146,7 +154,8 @@ async function main() {
   for (const reel of todo.reels) {
     const output = join(rebuild, `${reel.slug}.reel.mp4`);
     const cutOnly = args.flags.has("--cut-only") ? ["--cut-only"] : [];
-    run(["bun", join("scripts", "reel", "make-reel.ts"), inBundle(bundle, reel.def), "--out", output, "--no-share", ...cutOnly], ROOT);
+    const def = localReel(bundle, rebuild, job.episode, reel);
+    run(["bun", join("scripts", "reel", "make-reel.ts"), def, "--out", output, "--no-share", ...cutOnly], ROOT);
     if (cutOnly.length) continue;
     const out: Output = { file: output, bytes: statSync(output).size, sha256: sha256File(output), loudness: await measureLoudness(output) };
     results.reels[reel.slug] = out;
@@ -156,10 +165,60 @@ async function main() {
   console.log(`\nDone.\n${lines.join("\n") || "(--cut-only: nothing rendered)"}`);
 }
 
-/** What the clean cut is made from: the shared decisions, the recording, and whether the edit's intro is on. */
+/** What the clean cut is made from: the shared decisions, the recording, whether the edit's intro is on, and which intro. */
 export function baseStamp(job: Job): Omit<RebuildStamp, "upscales"> {
   const decisions = job.files.find((f) => f.role === "decisions" && f.path === `${job.episode}.decisions.json`);
-  return { decisions: decisions?.sha256 ?? "", recording: job.recording.fingerprint, intro: !parts(job).noIntro };
+  const intro = !parts(job).noIntro;
+  const introFiles = job.files.filter((f) => f.role === "intro").map((f) => `${f.path}:${f.sha256}`).sort();
+  return {
+    decisions: decisions?.sha256 ?? "",
+    recording: job.recording.fingerprint,
+    intro,
+    introDigest: intro && introFiles.length ? createHash("sha256").update(introFiles.join("\n")).digest("hex") : null,
+  };
+}
+
+/**
+ * Where the rebuild goes. A bundle in the shared folder ("bundles" in share.local.json)
+ * must not fill it with gigabytes of clean cuts and upscales for everyone: there it's
+ * "rebuilds" in share.local.json, else ~/waterhouse-rebuilds, then <episode>/. Any other
+ * bundle (a local copy): its own rebuild/.
+ */
+export function rebuildDir(bundle: string, episode: string, config: LocalConfig, home = homedir()): string {
+  const shared = config.bundles ? resolve(config.bundles) : null;
+  const rel = shared ? relative(shared, resolve(bundle)) : "..";
+  const inShared = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+  if (!inShared) return join(bundle, "rebuild");
+  return join(config.rebuilds ? resolve(config.rebuilds) : join(home, "waterhouse-rebuilds"), episode);
+}
+
+/** A copy of the bundle's reel definition next to the rebuild, reading the clean cut there and the bundle's decisions. */
+export function localReel(bundle: string, rebuild: string, episode: string, reel: ReelPart): string {
+  const def = JSON.parse(readFileSync(inBundle(bundle, reel.def), "utf8"));
+  def.episode = { clean: join(rebuild, cleanFileName(episode, reel.clean)), decisions: inBundle(bundle, `${episode}.decisions.json`) };
+  const out = join(rebuild, `${reel.slug}.shared-input.reel.json`);
+  writeFileSync(out, JSON.stringify(def, null, 1));
+  return out;
+}
+
+/** Why nothing renders, naming the commit and the worktree to use when only a part's code differs. */
+export function notRendering(checks: Check[], bundle: string, recording?: string): string {
+  const failed = checks.filter((c) => !c.ok && !c.warn);
+  const code = failed.filter((c) => c.code);
+  if (!code.length || code.length !== failed.length) return "Not rendering: fix what preflight lists first.";
+  const lines = ["Not rendering: some parts were made with code this checkout doesn't have."];
+  for (const c of code) {
+    const sha = c.code!.commit;
+    const what = c.code!.parts.map((p) => (p === "edit" ? "the edit (and every clean cut)" : `reel ${p}`)).join(", ");
+    lines.push(
+      `  ${what}: render from ${sha.slice(0, 7)} in its own checkout:`,
+      `    git worktree add ../share-${sha.slice(0, 7)} ${sha}`,
+      `    cd ../share-${sha.slice(0, 7)} && bun install && (cd longform && uv sync)`,
+      `    bun run rerender "${bundle}" --recording "${recording ?? "<your copy>"}"${c.code!.parts.includes("edit") ? "" : ` --only ${c.code!.parts.join(",")}`}`,
+    );
+  }
+  lines.push("  or --only the parts that do match here.");
+  return lines.join("\n");
 }
 
 type Results = { edit?: Output; reels: Record<string, Output> };

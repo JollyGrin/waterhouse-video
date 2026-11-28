@@ -44,6 +44,10 @@ import { reelBanner, reelTiming, type ReelBanner, type ReelIntro, type ReelOutro
 import { FUSE_DRUMS_AUDIO } from "../../src/ident/Fuse";
 // (the YouTube bumper's sound is placed by SessionReel; only its gain is worked out here)
 import { seshCaptionWords, TimeMap, type CaptionWord, type SeshDecisions } from "./sesh";
+import { renderVersion } from "../share/job";
+
+/** Where a render records the code it was made with: <reel minus .mp4>.render.json. */
+export const renderSidecar = (output: string) => `${output.replace(/\.mp4$/i, "")}.render.json`;
 
 export type Segment = { start: number; end: number; shot?: string; note?: string };
 /**
@@ -456,6 +460,8 @@ async function main() {
     throw new Error(`${output} missed the loudness target: ${final.i.toFixed(2)} LUFS, ${final.tp.toFixed(2)} dBTP`);
   }
   console.log(`Done: ${output}`);
+  // which code made this reel, for a share (#62 review): <output minus .mp4>.render.json
+  writeFileSync(renderSidecar(output), JSON.stringify({ ...renderVersion("reel"), at: new Date().toISOString() }, null, 1));
 
   /* ---------- bundle it for sharing (#62): one line, never fails the render ---------- */
 

@@ -21,10 +21,11 @@
  * pins the exact code.
  */
 
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { hostname, tmpdir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { ROOT } from "../template-media";
-import { measureLoudness, type ReelDef } from "../reel/make-reel";
+import { measureLoudness, renderSidecar, type ReelDef } from "../reel/make-reel";
 import {
   bundleDir,
   checkOutsideRepo,
@@ -50,8 +51,10 @@ import {
   safeRelPath,
   sha256File,
   toolVersions,
-  type CleanSpec,
+  introDigest,
   type FileRole,
+  type PartCommit,
+  type ReelEntry,
   type Job,
   type Output,
   type PinnedFile,
@@ -119,7 +122,10 @@ export async function buildBundle(opts: ShareOptions): Promise<{ dir: string; jo
 
   // A received bundle is itself the share (and may sit in the shared folder): no local bundle inside it.
   if (opts.local && existsSync(join(here, "job.json")))
-    throw new Error(`${here} is a share bundle already: to share changes, bun run share <its reel or decisions .json> --to <its folder> (or --publish)`);
+    throw new Error(
+      `${here} is a share bundle already: to share a change, edit its reels/<slug>.reel.json in place and run ` +
+        `bun run share <that file> --to "${dirname(here)}"`,
+    );
 
   /* ---------- the recording ---------- */
 
@@ -133,162 +139,208 @@ export async function buildBundle(opts: ShareOptions): Promise<{ dir: string; jo
   /* ---------- where it goes, and what's there already ---------- */
 
   const dir = opts.local ? checkOutsideRepo(localBundleDir(decisionsPath, episode), root) : bundleDir(episode, opts.to, readConfig(root), root);
-  let old: Job | null = null;
-  if (existsSync(dir) && readdirSync(dir).length > 0) {
-    if (!existsSync(join(dir, "job.json"))) throw new Error(`${dir} already exists and isn't a share bundle: pick another --to`);
-    old = JSON.parse(readFileSync(join(dir, "job.json"), "utf8")) as Job;
-  }
-
-  say(`Fingerprinting ${basename(recording)}...`);
-  const pinned = pinRecording(recording, undefined, () => info);
-  if (old && old.recording?.fingerprint && old.recording.fingerprint !== pinned.fingerprint && !opts.replace)
-    throw new Error(`${dir} is a share of a different recording (${old.recording.name}): pass --replace to overwrite it`);
-  // Keep an earlier share's download link (this bundle's, or a received one being re-shared) when it's the same recording.
-  const prior = old ?? (existsSync(join(here, "job.json")) ? (JSON.parse(readFileSync(join(here, "job.json"), "utf8")) as Job) : null);
-  const link = opts.link ?? (prior?.recording?.fingerprint === pinned.fingerprint ? prior.recording.link : undefined);
-  if (link) pinned.link = link;
-
-  /* ---------- the reels: this one, the ones next to the edit, the ones already in the bundle ---------- */
-
-  const reelsIn = new Map<string, ReelIn>();
-  for (const r of findReels(decisionsPath)) reelsIn.set(r.slug, r);
-  if (given) reelsIn.set(given.slug, given);
-
-  const reels: Record<string, { clean: CleanSpec; reference?: Output; from: string }> = {};
-  for (const r of reelsIn.values()) {
-    const file = resolve(dirname(r.defPath), r.def.episode!.clean);
-    if (!existsSync(file)) {
-      if (r === given)
-        throw new Error(`the clean cut this reel was cut from isn't there: ${file} (its size decides the crops, so it's needed to share)`);
-      notes.push(`left out reel ${r.slug}: its clean cut ${basename(file)} isn't on this computer`);
-      reelsIn.delete(r.slug);
-      continue;
-    }
-    const size = probe(file);
-    const method = cleanMethod(file, size, info);
-    if (!method)
-      throw new Error(
-        `can't tell how ${basename(file)} was upscaled: rename it to <name>.clean.x4plus${size.height}p.mp4 or ` +
-          `<name>.clean.lanczos${size.height}p.mp4 (and "clean" in ${basename(r.defPath)}), then share again`,
-      );
-    reels[r.slug] = { clean: { width: size.width, height: size.height, method }, from: r.defPath };
-  }
-  // reels only in the existing bundle stay, as they were
-  const kept = old && old.version === JOB_VERSION && jobProblems(old).length === 0 ? parts(old).reels.filter((r) => !reelsIn.has(r.slug)) : [];
-
-  /* ---------- build it next door, so a failure never leaves a half bundle ---------- */
-
-  const tmp = `${dir}.sharing-${process.pid}`;
-  rmSync(tmp, { recursive: true, force: true });
-  mkdirSync(tmp, { recursive: true });
+  const unlock = opts.local ? () => {} : takeLock(dir, root);
   try {
-    const files: PinnedFile[] = [];
-    const pin = (rel: string, role: FileRole, publicPath?: string) => {
-      const p = join(tmp, ...rel.split("/"));
-      files.push({ path: rel, role, bytes: statSync(p).size, sha256: sha256File(p), ...(publicPath ? { publicPath } : {}) });
-    };
-    const copyIn = (src: string, rel: string, role: FileRole, publicPath?: string) => {
-      const dest = join(tmp, ...rel.split("/"));
-      mkdirSync(dirname(dest), { recursive: true });
-      copyFileSync(src, dest);
-      pin(rel, role, publicPath);
-    };
-
-    /* the edit, with its clips and intro pointing into the bundle */
-
-    const shared: SeshDecisionsLite = JSON.parse(JSON.stringify(decisions));
-    (shared.inserts ?? []).forEach((ins, i) => {
-      if (ins.kind !== "clip" || !ins.path) return;
-      const src = fromDecisions(ins.path);
-      if (!existsSync(src)) throw new Error(`the edit inserts a clip that isn't on this computer: ${src}`);
-      // a received bundle's clip is already numbered: don't number it twice
-      const base = ins.path.startsWith("media/inserts/") ? basename(src).replace(/^\d+-/, "") : basename(src);
-      const rel = `media/inserts/${i + 1}-${base}`;
-      copyIn(src, rel, "insert");
-      ins.path = rel;
-    });
-    if (shared.intro?.file) {
-      // a bare name is sesh-edit's built intro; a path is absolute or relative to the decisions
-      const f = shared.intro.file;
-      const file = /[\\/]/.test(f) ? fromDecisions(f) : join(root, INTRO_ASSETS, f);
-      if (!existsSync(file)) throw new Error(`the edit's intro isn't on this computer: ${file} (run bun run render:intro)`);
-      const stem = basename(file, extname(file));
-      for (const ext of [".json", ".flac", ".wav"]) {
-        const side = join(dirname(file), stem + ext);
-        if (side !== file && existsSync(side)) copyIn(side, `media/intro/${stem}${ext}`, "intro");
-      }
-      copyIn(file, `media/intro/${basename(file)}`, "intro");
-      shared.intro.file = `media/intro/${basename(file)}`;
-    }
-    const decisionsText = JSON.stringify(shared, null, 1);
-    if (kept.length && old && existsSync(join(dir, `${episode}.decisions.json`)) && readFileSync(join(dir, `${episode}.decisions.json`), "utf8") !== decisionsText)
-      notes.push(`the edit changed since ${kept.map((r) => r.slug).join(", ")} was shared: check those reels' spans still fit`);
-    writeFileSync(join(tmp, `${episode}.decisions.json`), decisionsText);
-    pin(`${episode}.decisions.json`, "decisions");
-
-    /* the reels, reading the clean cut the rerender makes */
-
-    for (const r of reelsIn.values()) {
-      const reel: ReelDef = {
-        ...r.def,
-        episode: { clean: `../rebuild/${cleanFileName(episode, reels[r.slug].clean)}`, decisions: `../${episode}.decisions.json` },
-      };
-      delete reel.output;
-      mkdirSync(join(tmp, "reels"), { recursive: true });
-      writeFileSync(join(tmp, ...reelDefPath(r.slug).split("/")), JSON.stringify(reel, null, 1));
-      pin(reelDefPath(r.slug), "reel");
-    }
-    for (const r of kept) {
-      if (!existsSync(join(dir, ...r.def.split("/")))) continue;
-      copyIn(join(dir, ...r.def.split("/")), r.def, "reel");
-      reels[r.slug] = { clean: r.clean, reference: r.reference, from: "" };
-    }
-    if (Object.keys(reels).length) for (const p of reelPrivateMedia(root)) copyIn(join(root, "public", p), `media/public/${p}`, "private-media", p);
-
-    /* the sharer's own renders, for comparison */
-
-    const reference = async (file: string, loud: boolean): Promise<Output | undefined> => {
-      if (!existsSync(file)) return undefined;
-      say(`Hashing your render ${basename(file)} (for comparison)...`);
-      const out: Output = { file: basename(file), bytes: statSync(file).size, sha256: sha256File(file) };
-      if (loud) out.loudness = await measureLoudness(file);
-      return out;
-    };
-    for (const r of reelsIn.values()) {
-      const out = r.def.output ? resolve(dirname(r.defPath), r.def.output) : join(dirname(r.defPath), `${r.slug}.reel.mp4`);
-      reels[r.slug].reference = await reference(out, true);
-    }
-    const editRef = (await reference(join(here, `${episode}.edited.mp4`), false)) ?? (old?.version === JOB_VERSION ? old.edit?.reference : undefined);
-
-    const job: Job = {
-      version: JOB_VERSION,
-      created: new Date().toISOString(),
-      by: git(["config", "user.name"], root).out || undefined,
-      name: episode,
-      episode,
-      repo: { commit: git(["rev-parse", "HEAD"], root).out, branch: git(["branch", "--show-current"], root).out || undefined },
-      tools: toolVersions(),
-      recording: pinned,
-      files,
-      edit: editRef ? { reference: editRef } : {},
-      reels: Object.fromEntries(
-        Object.entries(reels)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([slug, r]) => [slug, { clean: r.clean, ...(r.reference ? { reference: r.reference } : {}) }]),
-      ),
-    };
-    writeFileSync(join(tmp, "job.json"), JSON.stringify(job, null, 1));
-    writeFileSync(join(tmp, "README.txt"), readme(job));
-
-    /* swap: take out only what the old share put there, then move the new one in */
-
-    mkdirSync(dir, { recursive: true });
-    if (old) removeShared(dir, old);
-    moveInto(tmp, dir);
-    return { dir, job, notes };
+    return await buildInto(dir, readExisting(dir));
   } finally {
-    rmSync(tmp, { recursive: true, force: true });
+    unlock();
   }
+
+  async function buildInto(dir: string, old: Job | null): Promise<{ dir: string; job: Job; notes: string[] }> {
+
+    say(`Fingerprinting ${basename(recording)}...`);
+    const pinned = pinRecording(recording, undefined, () => info);
+    if (old && old.recording?.fingerprint && old.recording.fingerprint !== pinned.fingerprint && !opts.replace)
+      throw new Error(`${dir} is a share of a different recording (${old.recording.name}): pass --replace to overwrite it`);
+    // Keep an earlier share's download link (this bundle's, or a received one being re-shared) when it's the same recording.
+    const prior = old ?? (existsSync(join(here, "job.json")) ? (JSON.parse(readFileSync(join(here, "job.json"), "utf8")) as Job) : null);
+    const link = opts.link ?? (prior?.recording?.fingerprint === pinned.fingerprint ? prior.recording.link : undefined);
+    if (link) pinned.link = link;
+
+    /* ---------- the reels: this one, the ones next to the edit, the ones already in the bundle ---------- */
+
+    const reelsIn = new Map<string, ReelIn>();
+    for (const r of findReels(decisionsPath)) reelsIn.set(r.slug, r);
+    if (given) reelsIn.set(given.slug, given);
+
+    const reels: Record<string, ReelEntry> = {};
+    const priorReels = prior?.version === JOB_VERSION ? prior.reels ?? {} : {};
+    for (const r of reelsIn.values()) {
+      // a received bundle's reel: its clean cut and code version are already pinned there
+      const fromBundle = existsSync(join(here, "job.json")) && resolve(dirname(r.defPath)) === resolve(here, "reels") && priorReels[r.slug];
+      const commit = reelCommit(r, fromBundle ? priorReels[r.slug] : undefined);
+      if (fromBundle) {
+        reels[r.slug] = { clean: priorReels[r.slug].clean, ...commit };
+        continue;
+      }
+      const file = resolve(dirname(r.defPath), r.def.episode!.clean);
+      if (!existsSync(file)) {
+        if (r === given)
+          throw new Error(`the clean cut this reel was cut from isn't there: ${file} (its size decides the crops, so it's needed to share)`);
+        notes.push(`left out reel ${r.slug}: its clean cut ${basename(file)} isn't on this computer`);
+        reelsIn.delete(r.slug);
+        continue;
+      }
+      const size = probe(file);
+      const method = cleanMethod(file, size, info);
+      if (!method) {
+        const fix =
+          `rename it to <name>.clean.x4plus${size.height}p.mp4 or <name>.clean.lanczos${size.height}p.mp4 ` +
+          `(and "clean" in ${basename(r.defPath)})`;
+        if (r === given) throw new Error(`can't tell how ${basename(file)} was upscaled: ${fix}, then share again`);
+        notes.push(`left out reel ${r.slug}: can't tell how ${basename(file)} was upscaled (${fix})`);
+        reelsIn.delete(r.slug);
+        continue;
+      }
+      reels[r.slug] = { clean: { width: size.width, height: size.height, method }, ...commit };
+    }
+    // reels only in the existing bundle stay, as they were (with their own code version)
+    const oldReels = old?.version === JOB_VERSION ? old.reels ?? {} : {};
+    const kept = old?.version === JOB_VERSION ? parts(old).reels.filter((r) => !reelsIn.has(r.slug)) : [];
+
+    /* ---------- build it outside the shared folder, so a failure never leaves a half bundle ---------- */
+
+    const tmp = makeTemp(dir);
+    try {
+      const files: PinnedFile[] = [];
+      const pin = (rel: string, role: FileRole, publicPath?: string) => {
+        const p = join(tmp, ...rel.split("/"));
+        files.push({ path: rel, role, bytes: statSync(p).size, sha256: sha256File(p), ...(publicPath ? { publicPath } : {}) });
+      };
+      const copyIn = (src: string, rel: string, role: FileRole, publicPath?: string) => {
+        const dest = join(tmp, ...rel.split("/"));
+        mkdirSync(dirname(dest), { recursive: true });
+        copyFileSync(src, dest);
+        pin(rel, role, publicPath);
+      };
+
+      /* the edit, with its clips and intro pointing into the bundle */
+
+      const shared: SeshDecisionsLite = JSON.parse(JSON.stringify(decisions));
+      (shared.inserts ?? []).forEach((ins, i) => {
+        if (ins.kind !== "clip" || !ins.path) return;
+        const src = fromDecisions(ins.path);
+        if (!existsSync(src)) throw new Error(`the edit inserts a clip that isn't on this computer: ${src}`);
+        // a received bundle's clip is already numbered: don't number it twice
+        const base = ins.path.startsWith("media/inserts/") ? basename(src).replace(/^\d+-/, "") : basename(src);
+        const rel = `media/inserts/${i + 1}-${base}`;
+        copyIn(src, rel, "insert");
+        ins.path = rel;
+      });
+      // The edit renders with its intro: bundle the one it was made with, or leave the edit out (the reels don't need it).
+      let editSkip: string | undefined;
+      let introUnverified = false;
+      let intro: string | undefined;
+      if (shared.intro?.file) {
+        // a bare name is sesh-edit's built intro; a path is absolute or relative to the decisions
+        const f = shared.intro.file;
+        const file = /[\\/]/.test(f) ? fromDecisions(f) : join(root, INTRO_ASSETS, f);
+        const recorded = decisions.render?.intro_digest ?? undefined;
+        if (!existsSync(file)) editSkip = `its intro isn't on this computer (${file}: bun run render:intro)`;
+        else if (recorded && introDigest(file) !== recorded)
+          editSkip = "the intro changed since the edit was rendered: render the edit again (sesh-edit --from-decisions), then share";
+        else {
+          introUnverified = !recorded;
+          intro = introDigest(file);
+          const stem = basename(file, extname(file));
+          for (const ext of [".json", ".flac", ".wav"]) {
+            const side = join(dirname(file), stem + ext);
+            if (side !== file && existsSync(side)) copyIn(side, `media/intro/${stem}${ext}`, "intro");
+          }
+          copyIn(file, `media/intro/${basename(file)}`, "intro");
+          shared.intro.file = `media/intro/${basename(file)}`;
+        }
+      }
+      if (editSkip) {
+        if (!reelsIn.size && !kept.length) throw new Error(`nothing to share: the edit can't be (${editSkip}) and there are no reels`);
+        notes.push(`left out the edit: ${editSkip}`);
+      }
+      const code = decisions.render?.code;
+      const editCommit: PartCommit = code && !code.dirty && /^[0-9a-f]{40}$/.test(code.commit) ? { commit: code.commit } : { commitAssumed: true };
+      const decisionsText = JSON.stringify(shared, null, 1);
+      if (kept.length && old && existsSync(join(dir, `${episode}.decisions.json`)) && readFileSync(join(dir, `${episode}.decisions.json`), "utf8") !== decisionsText)
+        notes.push(`the edit changed since ${kept.map((r) => r.slug).join(", ")} was shared: check those reels' spans still fit`);
+      writeFileSync(join(tmp, `${episode}.decisions.json`), decisionsText);
+      pin(`${episode}.decisions.json`, "decisions");
+
+      /* the reels, reading the clean cut the rerender makes */
+
+      for (const r of reelsIn.values()) {
+        const reel: ReelDef = {
+          ...r.def,
+          episode: { clean: `../rebuild/${cleanFileName(episode, reels[r.slug].clean)}`, decisions: `../${episode}.decisions.json` },
+        };
+        delete reel.output;
+        mkdirSync(join(tmp, "reels"), { recursive: true });
+        writeFileSync(join(tmp, ...reelDefPath(r.slug).split("/")), JSON.stringify(reel, null, 1));
+        pin(reelDefPath(r.slug), "reel");
+      }
+      for (const r of kept) {
+        copyIn(join(dir, ...r.def.split("/")), r.def, "reel");
+        reels[r.slug] = { ...oldReels[r.slug] };
+      }
+      if (Object.keys(reels).length) for (const p of reelPrivateMedia(root)) copyIn(join(root, "public", p), `media/public/${p}`, "private-media", p);
+
+      /* the sharer's own renders, for comparison */
+
+      const reference = async (file: string, loud: boolean): Promise<Output | undefined> => {
+        if (!existsSync(file)) return undefined;
+        say(`Hashing your render ${basename(file)} (for comparison)...`);
+        const out: Output = { file: basename(file), bytes: statSync(file).size, sha256: sha256File(file) };
+        if (loud) out.loudness = await measureLoudness(file);
+        return out;
+      };
+      for (const r of reelsIn.values()) {
+        const out = r.def.output ? resolve(dirname(r.defPath), r.def.output) : join(dirname(r.defPath), `${r.slug}.reel.mp4`);
+        reels[r.slug].reference = await reference(out, true);
+      }
+      const editRef = editSkip
+        ? undefined
+        : ((await reference(join(here, `${episode}.edited.mp4`), false)) ?? (old?.version === JOB_VERSION ? old.edit?.reference : undefined));
+
+      const job: Job = {
+        version: JOB_VERSION,
+        created: new Date().toISOString(),
+        by: git(["config", "user.name"], root).out || undefined,
+        name: episode,
+        episode,
+        repo: { commit: git(["rev-parse", "HEAD"], root).out, branch: git(["branch", "--show-current"], root).out || undefined },
+        tools: toolVersions(),
+        recording: pinned,
+        files,
+        edit: editSkip
+          ? { skipped: editSkip }
+          : { ...editCommit, ...(intro ? { intro } : {}), ...(introUnverified ? { introUnverified } : {}), ...(editRef ? { reference: editRef } : {}) },
+        reels: Object.fromEntries(Object.entries(reels).sort(([a], [b]) => a.localeCompare(b))),
+      };
+      writeFileSync(join(tmp, "job.json"), JSON.stringify(job, null, 1));
+      writeFileSync(join(tmp, "README.txt"), readme(job));
+
+      /* swap: take out only what the old share put there, move the new one in, job.json last */
+
+      swapIn(tmp, dir, old);
+      verifyBundle(dir, job);
+      return { dir, job, notes };
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+}
+
+/**
+ * A reel's code version: what make-reel recorded next to its render (<reel>.render.json),
+ * else what a received bundle pinned for it, else the share's commit (assumed).
+ */
+function reelCommit(r: ReelIn, fromBundle?: ReelEntry): PartCommit {
+  const out = r.def.output ? resolve(dirname(r.defPath), r.def.output) : join(dirname(r.defPath), `${r.slug}.reel.mp4`);
+  try {
+    const v = JSON.parse(readFileSync(renderSidecar(out), "utf8"));
+    if (v && v.dirty === false && /^[0-9a-f]{40}$/.test(v.commit)) return { commit: v.commit };
+  } catch {
+    // never rendered here, or before the sidecar existed
+  }
+  if (fromBundle?.commit) return { commit: fromBundle.commit, ...(fromBundle.commitAssumed ? { commitAssumed: true } : {}) };
+  return { commitAssumed: true };
 }
 
 /** Reel definitions next to the decisions (or in its reel/ folder) made from this episode. */
@@ -338,29 +390,129 @@ export function removeShared(dir: string, old: Pick<Job, "files">) {
   }
 }
 
-function moveInto(from: string, to: string) {
+function moveInto(from: string, to: string, skip: string[] = []) {
   for (const entry of readdirSync(from)) {
+    if (skip.includes(entry)) continue;
     const src = join(from, entry);
     const dest = join(to, entry);
     if (statSync(src).isDirectory()) {
       mkdirSync(dest, { recursive: true });
       moveInto(src, dest);
-    } else {
-      rmSync(dest, { force: true });
-      renameSync(src, dest);
-    }
+    } else moveFile(src, dest);
   }
+}
+
+/** rename, or copy + delete across drives (the temp folder is outside the shared one). */
+function moveFile(src: string, dest: string) {
+  rmSync(dest, { force: true });
+  try {
+    renameSync(src, dest);
+  } catch {
+    copyFileSync(src, dest);
+    unlinkSync(src);
+  }
+}
+
+/* ---------- writing into a (possibly shared, synced) bundle folder safely ---------- */
+
+/** In a bundle folder while a swap is under way: no job.json + this = an interrupted swap, safe to redo. */
+export const SWAP_MARK = ".share-swap";
+const LOCK_STALE_MS = 10 * 60 * 1000;
+
+/** A fresh build folder outside the shared folder (so Dropbox never syncs a half-built bundle); clears #63's old siblings. */
+function makeTemp(dir: string): string {
+  if (existsSync(dirname(dir)))
+    for (const n of readdirSync(dirname(dir))) if (n.startsWith(`${basename(dir)}.sharing-`)) rmSync(join(dirname(dir), n), { recursive: true, force: true });
+  return mkdtempSync(join(tmpdir(), "waterhouse-share-"));
+}
+
+/**
+ * Take out only what the old share put there, move the new files in, job.json last. A
+ * folder without job.json but with SWAP_MARK was interrupted: the next share redoes it.
+ */
+export function swapIn(tmp: string, dir: string, old: Pick<Job, "files"> | null) {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, SWAP_MARK), new Date().toISOString());
+  rmSync(join(dir, "job.json"), { force: true });
+  if (old) removeShared(dir, old);
+  moveInto(tmp, dir, ["job.json"]);
+  moveFile(join(tmp, "job.json"), join(dir, "job.json"));
+  rmSync(join(dir, SWAP_MARK), { force: true });
+}
+
+/** Read the bundle back and check every file: a sync client could have changed it under us. */
+export function verifyBundle(dir: string, want: Job) {
+  const back = readJob(dir);
+  const bad = back.files.find((f) => {
+    const p = join(dir, ...f.path.split("/"));
+    return !existsSync(p) || sha256File(p) !== f.sha256;
+  });
+  if (JSON.stringify(back) !== JSON.stringify(JSON.parse(JSON.stringify(want))) || bad)
+    throw new Error(`Not shared: ${dir} doesn't match what was written${bad ? ` (${bad.path})` : ""}; try again`);
+}
+
+/**
+ * The share already in `dir`, checked, or null when there's none (or a swap was
+ * interrupted). Refuses one it can't keep safely: an unreadable or newer job.json, or a
+ * reel it lists that isn't there yet (Dropbox still syncing), so nobody's reels get dropped.
+ */
+export function readExisting(dir: string): Job | null {
+  if (!existsSync(dir) || readdirSync(dir).length === 0) return null;
+  if (!existsSync(join(dir, "job.json"))) {
+    if (existsSync(join(dir, SWAP_MARK))) return null;
+    throw new Error(`${dir} already exists and isn't a share bundle: pick another --to`);
+  }
+  const syncing = (why: string) => new Error(`Not shared: the share in ${dir} isn't complete (${why}). Dropbox may still be syncing it: try again in a minute.`);
+  let old: Job;
+  try {
+    old = JSON.parse(readFileSync(join(dir, "job.json"), "utf8")) as Job;
+  } catch {
+    throw syncing("its job.json can't be read");
+  }
+  if (typeof old.version === "number" && old.version > JOB_VERSION)
+    throw new Error(`Not shared: ${dir} was shared from a newer version of the repo (job.json version ${old.version}): get the latest work first`);
+  const problems = jobProblems(old);
+  if (problems.length) throw syncing(`its job.json: ${problems[0]}`);
+  for (const r of parts(old).reels) if (!existsSync(join(dir, ...r.def.split("/")))) throw syncing(`${r.def} is listed but not there`);
+  return old;
+}
+
+/** A short-lived lock next to a shared bundle, so two people sharing the same episode at once don't interleave. */
+export function takeLock(dir: string, root = ROOT): () => void {
+  const lock = join(dirname(dir), `.${basename(dir)}.publishing`);
+  if (existsSync(lock)) {
+    let held: { by?: string; at?: string } | null = null;
+    try {
+      held = JSON.parse(readFileSync(lock, "utf8"));
+    } catch {
+      held = null; // unreadable: treat as stale
+    }
+    if (held?.at && Date.now() - Date.parse(held.at) < LOCK_STALE_MS)
+      throw new Error(`Not shared: ${held.by ?? "someone"} is sharing ${basename(dir)} right now (since ${held.at.slice(11, 16)} UTC). Try again in a few minutes.`);
+  }
+  mkdirSync(dirname(lock), { recursive: true });
+  writeFileSync(lock, JSON.stringify({ by: git(["config", "user.name"], root).out || "someone", host: hostname(), pid: process.pid, at: new Date().toISOString() }));
+  return () => rmSync(lock, { force: true });
 }
 
 /* ---------- publish: a local bundle into the shared folder ---------- */
 
-export type PublishOptions = { source: string; to?: string; root?: string; checkCode?: boolean; probe?: (file: string) => RecordingInfo };
+export type PublishOptions = {
+  source: string;
+  to?: string;
+  link?: string;
+  recording?: string;
+  root?: string;
+  checkCode?: boolean;
+  probe?: (file: string) => RecordingInfo;
+};
 
 /**
  * Copies a local bundle into the shared folder (<to or share.local.json "bundles">/<episode>/).
  * Given a .reel.json or .decisions.json, (re)makes the local bundle first. Replaces like a
- * re-share: built next door, swapped in, only the old share's own files removed, and reels
- * that are only in the shared copy (a teammate's) kept.
+ * re-share: built outside the shared folder, swapped in (job.json last), only the old
+ * share's own files removed, reels that are only in the shared copy (a teammate's) kept
+ * with their own code versions, and a short lock while it writes.
  */
 export async function publish(opts: PublishOptions): Promise<{ dir: string; job: Job; notes: string[] }> {
   const root = opts.root ?? ROOT;
@@ -373,7 +525,16 @@ export async function publish(opts: PublishOptions): Promise<{ dir: string; job:
   let local = resolve(opts.source);
   const notes: string[] = [];
   if (local.endsWith(".json")) {
-    const made = await buildBundle({ input: local, local: true, root, checkCode: opts.checkCode, probe: opts.probe, quiet: true });
+    const made = await buildBundle({
+      input: local,
+      local: true,
+      root,
+      checkCode: opts.checkCode,
+      probe: opts.probe,
+      quiet: true,
+      recording: opts.recording,
+      link: opts.link,
+    });
     local = made.dir;
     notes.push(...made.notes);
   }
@@ -387,18 +548,12 @@ export async function publish(opts: PublishOptions): Promise<{ dir: string; job:
   const dir = bundleDir(job.episode, opts.to, config, root);
   if (dir === local) return { dir, job, notes };
 
-  let old: Job | null = null;
-  if (existsSync(dir) && readdirSync(dir).length > 0) {
-    if (!existsSync(join(dir, "job.json"))) throw new Error(`${dir} already exists and isn't a share bundle`);
-    old = JSON.parse(readFileSync(join(dir, "job.json"), "utf8")) as Job;
-    if (old.recording?.fingerprint && old.recording.fingerprint !== job.recording.fingerprint)
-      throw new Error(`Not shared: ${dir} is a share of a different recording (${old.recording.name}). Move it aside first.`);
-  }
-
-  const tmp = `${dir}.sharing-${process.pid}`;
-  rmSync(tmp, { recursive: true, force: true });
-  mkdirSync(tmp, { recursive: true });
+  const unlock = takeLock(dir, root);
+  const tmp = makeTemp(dir);
   try {
+    const old = readExisting(dir);
+    if (old?.recording?.fingerprint && old.recording.fingerprint !== job.recording.fingerprint)
+      throw new Error(`Not shared: ${dir} is a share of a different recording (${old.recording.name}). Move it aside first.`);
     const files = [...job.files];
     const copy = (from: string, rel: string) => {
       const dest = join(tmp, ...rel.split("/"));
@@ -406,27 +561,27 @@ export async function publish(opts: PublishOptions): Promise<{ dir: string; job:
       copyFileSync(join(from, ...rel.split("/")), dest);
     };
     for (const f of job.files) copy(local, f.path);
-    const out: Job = { ...job, files, reels: { ...(job.reels ?? {}) } };
-    // a teammate's reels that are only in the shared copy stay
-    if (old && old.version === JOB_VERSION && jobProblems(old).length === 0) {
+    const link = opts.link ?? job.recording.link;
+    const out: Job = { ...job, recording: { ...job.recording, ...(link ? { link } : {}) }, files, reels: { ...(job.reels ?? {}) } };
+    // a teammate's reels that are only in the shared copy stay, exactly as pinned there
+    if (old?.version === JOB_VERSION) {
       for (const r of parts(old).reels) {
         if (out.reels![r.slug]) continue;
-        const entry = old.files.find((f) => f.path === r.def && f.role === "reel");
-        if (!entry || !existsSync(join(dir, ...r.def.split("/")))) continue;
+        const entry = old.files.find((f) => f.path === r.def && f.role === "reel")!;
         copy(dir, r.def);
         files.push({ ...entry, sha256: sha256File(join(tmp, ...r.def.split("/"))) });
-        out.reels![r.slug] = { clean: r.clean, ...(r.reference ? { reference: r.reference } : {}) };
+        out.reels![r.slug] = { ...old.reels![r.slug] };
         notes.push(`kept reel ${r.slug}, which was only in the shared folder`);
       }
     }
     writeFileSync(join(tmp, "job.json"), JSON.stringify(out, null, 1));
     writeFileSync(join(tmp, "README.txt"), readme(out));
-    mkdirSync(dir, { recursive: true });
-    if (old) removeShared(dir, old);
-    moveInto(tmp, dir);
+    swapIn(tmp, dir, old);
+    verifyBundle(dir, out);
     return { dir, job: out, notes };
   } finally {
     rmSync(tmp, { recursive: true, force: true });
+    unlock();
   }
 }
 
@@ -491,7 +646,7 @@ if (/share\.ts$/.test(process.argv[1] ?? "")) {
       process.exit(1);
     }
   })();
-  (args.publish ? publish({ source: args.input, to: args.to }) : buildBundle(args))
+  (args.publish ? publish({ source: args.input, to: args.to, link: args.link, recording: args.recording }) : buildBundle(args))
     .then(({ dir, job, notes }) => {
       if (args.publish) console.log(`\nShared "${basename(dir)}" in the shared folder: ${dir}`);
       else if (args.local) console.log(`\nBundled (not shared yet): ${dir}\nTo share it: bun run share --publish "${dir}"`);

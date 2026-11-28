@@ -1,10 +1,13 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { findBin } from "../lib/ff";
 import {
+  introDigest,
+  partCodeChecks,
+  renderVersion,
   checkOutsideRepo,
   cleanCheck,
   cleanFileName,
@@ -29,9 +32,10 @@ import {
   toolsCheck,
   type RecordingInfo,
 } from "./job";
-import { buildBundle, publish } from "./share";
+import { buildBundle, publish, readExisting, SWAP_MARK, takeLock } from "./share";
 import { autoBundle } from "./auto";
-import { baseStamp, cleanSizeProblem, compare, localDecisions, selectParts } from "./rerender";
+import { baseStamp, cleanSizeProblem, compare, localDecisions, localReel, notRendering, rebuildDir, selectParts } from "./rerender";
+import { renderSidecar } from "../reel/make-reel";
 import { ROOT } from "../template-media";
 
 // Everything here is made up and tiny: no real recordings, no renders (#60, #62).
@@ -134,7 +138,7 @@ describe("share → job.json → preflight", async () => {
       ["decisions", "guest.decisions.json"],
       ["reel", "reels/guest-best-30.reel.json"],
     ]);
-    expect(job.reels).toEqual({ "guest-best-30": { clean: { width: 1280, height: 720, method: "none" } } });
+    expect(job.reels).toEqual({ "guest-best-30": { clean: { width: 1280, height: 720, method: "none" }, commitAssumed: true } });
     expect(parts(job)).toMatchObject({ edit: true, noIntro: false, reels: [{ slug: "guest-best-30", def: "reels/guest-best-30.reel.json" }] });
   });
 
@@ -166,9 +170,10 @@ describe("share → job.json → preflight", async () => {
 
   it("passes with the same recording and untouched files", () => {
     const checks = run(rec);
-    expect(checks.every((c) => c.ok)).toBe(true);
+    expect(checks.filter((c) => !c.ok && !c.warn)).toEqual([]);
     expect(formatReport(checks)).toEqual(expect.objectContaining({ reproducible: true }));
-    expect(formatReport(checks).text).toEndWith("REPRODUCIBLE");
+    // the only warnings: made-up renders carry no code version or intro fingerprint
+    expect(checks.filter((c) => c.warn).map((c) => c.label)).toEqual(["the edit's intro"]);
   });
 
   it("fails loudly on a different recording with the same name and size", () => {
@@ -207,14 +212,16 @@ describe("share → job.json → preflight", async () => {
 });
 
 describe("an edit share", () => {
-  it("refuses an intro that isn't on this computer (now part of every bundle)", async () => {
+  it("leaves the edit out when its intro isn't on this computer (the reel still goes)", async () => {
     const src = join(TMP, "edit");
     episode(src);
     const decisions = join(src, "guest.decisions.json");
     const d = JSON.parse(readFileSync(decisions, "utf8"));
     d.intro.file = join(src, "missing-intro.webm");
     writeFileSync(decisions, JSON.stringify(d));
-    await expect(buildBundle({ input: decisions, to: join(TMP, "edit-shares"), probe, checkCode: false })).rejects.toThrow("intro isn't on this computer");
+    const made = await buildBundle({ input: decisions, to: join(TMP, "edit-shares"), probe, checkCode: false });
+    expect(made.job.edit!.skipped).toContain("its intro isn't on this computer");
+    expect(Object.keys(made.job.reels!)).toEqual(["guest-best-30"]);
   });
 
   it("refuses a recording the edit wasn't made from", async () => {
@@ -325,7 +332,7 @@ describe("re-sharing a received bundle", () => {
     const checks = preflight(dir, readJob(dir), { recording: join(dir, "guest.mp4"), probe, tools: again.job.tools, config: {} }).checks.filter(
       (c) => !c.label.startsWith("code") && c.label !== "node packages",
     );
-    expect(formatReport(checks).text).toEndWith("REPRODUCIBLE");
+    expect(formatReport(checks).reproducible).toBe(true);
   });
 
   it("leaves the old bundle untouched when the new share fails", async () => {
@@ -516,9 +523,15 @@ describe("an old (#61) bundle", () => {
     const dir = join(TMP, "v1-reel");
     const rec = v1Bundle(dir, "reel");
     const job = readJob(dir);
-    expect(parts(job)).toEqual({ edit: false, noIntro: true, reels: [{ slug: "old-reel", def: "old-reel.reel.json", clean: { width: 1280, height: 720, method: "none" }, reference: undefined }] });
+    expect(parts(job)).toEqual({
+      edit: false,
+      noIntro: true,
+      editCommit: "a".repeat(40),
+      editCommitAssumed: false,
+      reels: [{ slug: "old-reel", def: "old-reel.reel.json", clean: { width: 1280, height: 720, method: "none" }, reference: undefined, commit: "a".repeat(40), commitAssumed: false }],
+    });
     const checks = preflight(dir, job, { recording: rec, probe, tools: job.tools, config: {} }).checks.filter((c) => !c.label.startsWith("code") && c.label !== "node packages");
-    expect(formatReport(checks).text).toEndWith("REPRODUCIBLE");
+    expect(formatReport(checks).reproducible).toBe(true);
     expect(baseStamp(job).intro).toBe(false);
   });
 
@@ -607,3 +620,287 @@ function sha256(file: string) {
   return new Bun.CryptoHasher("sha256").update(readFileSync(file)).digest("hex");
 }
 
+
+const SHA_A = "a".repeat(40);
+const SHA_C = "c".repeat(40);
+
+describe("review #63: each part keeps the code version it was rendered with", () => {
+  it("takes a reel's from make-reel's sidecar and the edit's from the decisions; else assumed, with a warning", async () => {
+    const src = join(TMP, "commits");
+    const { rec, reel } = episode(src);
+    let made = await buildBundle({ input: reel, to: join(TMP, "commits-shares"), probe, checkCode: false });
+    expect(made.job.reels!["guest-best-30"]).toMatchObject({ commitAssumed: true });
+    expect(made.job.edit).toMatchObject({ commitAssumed: true });
+    const warn = preflight(made.dir, made.job, { recording: rec, probe, tools: made.job.tools, config: {} }).checks.find((c) => c.label === "code versions");
+    expect(warn).toMatchObject({ warn: true });
+    expect(warn!.detail![0]).toContain("the edit, reel guest-best-30: no code version recorded");
+
+    // a render recorded its commits
+    mkdirSync(join(src, "somewhere"), { recursive: true });
+    writeFileSync(renderSidecar(join(src, "somewhere", "else.mp4")), JSON.stringify({ commit: SHA_C, dirty: false }));
+    const d = JSON.parse(readFileSync(join(src, "guest.decisions.json"), "utf8"));
+    d.render = { code: { commit: SHA_A, dirty: false } };
+    writeFileSync(join(src, "guest.decisions.json"), JSON.stringify(d));
+    made = await buildBundle({ input: reel, to: join(TMP, "commits-shares"), probe, checkCode: false });
+    expect(made.job.reels!["guest-best-30"].commit).toBe(SHA_C);
+    expect(made.job.reels!["guest-best-30"].commitAssumed).toBeUndefined();
+    expect(made.job.edit!.commit).toBe(SHA_A);
+    expect(parts(made.job)).toMatchObject({ editCommit: SHA_A, reels: [{ commit: SHA_C, commitAssumed: false }] });
+
+    // a render from unsaved code doesn't count as that commit
+    writeFileSync(renderSidecar(join(src, "somewhere", "else.mp4")), JSON.stringify({ commit: SHA_C, dirty: true }));
+    made = await buildBundle({ input: reel, to: join(TMP, "commits-shares"), probe, checkCode: false });
+    expect(made.job.reels!["guest-best-30"]).toMatchObject({ commitAssumed: true });
+  });
+
+  it("keeps a reel's own commit when another reel is shared into the bundle", async () => {
+    const dir = join(TMP, "commits-shares", "guest");
+    const before = readJob(dir).reels!["guest-best-30"];
+    const src = join(TMP, "commits");
+    mkdirSync(join(src, "other"), { recursive: true });
+    unlinkSync(join(src, "guest.reel.json"));
+    const other = episodeReel2(src, "other-reel", join(src, "other", "o.reel.json"));
+    const made = await buildBundle({ input: other, to: join(TMP, "commits-shares"), probe, checkCode: false });
+    expect(made.job.reels!["guest-best-30"]).toEqual(before);
+  });
+
+  it("checks each part against its own commit, and names the worktree for the one that differs", () => {
+    const repo = join(TMP, "parts-repo");
+    mkdirSync(join(repo, "longform"), { recursive: true });
+    mkdirSync(join(repo, "src"), { recursive: true });
+    sh(TMP, "init", "-q", "-b", "main", repo);
+    writeFileSync(join(repo, "longform", "edit.py"), "x = 1\n");
+    writeFileSync(join(repo, "src", "reel.ts"), "export const a = 1;\n");
+    sh(repo, "add", ".");
+    sh(repo, "commit", "-q", "-m", "one");
+    const first = sh(repo, "rev-parse", "HEAD");
+    writeFileSync(join(repo, "src", "reel.ts"), "export const a = 2;\n"); // captions changed on main
+    sh(repo, "commit", "-q", "-am", "two");
+    const second = sh(repo, "rev-parse", "HEAD");
+    expect(renderVersion("reel", repo)).toEqual({ commit: second, dirty: false });
+    writeFileSync(join(repo, "longform", "edit.py"), "x = 2\n");
+    expect(renderVersion("edit", repo)!.dirty).toBe(true);
+    expect(renderVersion("reel", repo)!.dirty).toBe(false);
+    sh(repo, "checkout", "--", ".");
+
+    const job = {
+      version: 2,
+      name: "guest",
+      episode: "guest",
+      created: "",
+      repo: { commit: second },
+      tools: { ffmpeg: null, bun: null, uv: null },
+      recording: {} as never,
+      files: [],
+      edit: { commit: first },
+      reels: { old: { clean: { width: 1, height: 1, method: "none" as const }, commit: first }, fresh: { clean: { width: 1, height: 1, method: "none" as const }, commit: second } },
+    };
+    const checks = partCodeChecks(job, repo);
+    expect(checks.map((c) => [c.label, c.ok])).toEqual([
+      [`code for the edit (sesh-edit) at ${first.slice(0, 7)}`, true], // longform didn't change
+      [`code for reel fresh at ${second.slice(0, 7)}`, true],
+      [`code for reel old at ${first.slice(0, 7)}`, false],
+    ]);
+    expect(partCodeChecks(job, repo, ["fresh"]).map((c) => c.ok)).toEqual([true, true]);
+    const msg = notRendering(checks, "/b", "/r.mp4");
+    expect(msg).toContain(`reel old: render from ${first.slice(0, 7)}`);
+    expect(msg).toContain(`git worktree add ../share-${first.slice(0, 7)} ${first}`);
+    expect(msg).toContain("--only old");
+  });
+});
+
+/** A reel of the episode in `dir`, kept elsewhere (not picked up by itself). */
+function episodeReel2(dir: string, slug: string, at: string) {
+  const def = {
+    slug,
+    title: "made up",
+    episode: { clean: join(dir, "guest.clean.mp4"), decisions: "../guest.decisions.json" },
+    artist: "GUEST",
+    episodeLabel: "WATERHOUSE SESSIONS",
+    cta: "FULL INTERVIEW ON YOUTUBE",
+    segments: [{ start: 1, end: 25 }],
+  };
+  writeFileSync(at, JSON.stringify(def));
+  return at;
+}
+
+describe("review #63: the edit's intro is the one it was rendered with", () => {
+  it("bundles the recorded intro, leaves the edit out (reels kept) when it changed, and warns when unrecorded", async () => {
+    const src = join(TMP, "intro");
+    const { rec, reel } = episode(src);
+    const decisionsPath = join(src, "guest.decisions.json");
+    const setDigest = (digest: string | undefined) => {
+      const d = JSON.parse(readFileSync(decisionsPath, "utf8"));
+      d.render = digest ? { intro_digest: digest } : {};
+      writeFileSync(decisionsPath, JSON.stringify(d));
+    };
+    const shares = join(TMP, "intro-shares");
+
+    setDigest(introDigest(join(src, "intro.webm")));
+    let made = await buildBundle({ input: reel, to: shares, probe, checkCode: false });
+    expect(made.job.edit).toMatchObject({ intro: introDigest(join(src, "intro.webm")) });
+    expect(made.job.edit!.introUnverified).toBeUndefined();
+    const stamp1 = baseStamp(made.job);
+
+    // the intro was rebuilt since the edit rendered
+    writeFileSync(join(src, "intro.webm"), bytes(200, 7));
+    made = await buildBundle({ input: reel, to: shares, probe, checkCode: false });
+    expect(made.job.edit!.skipped).toContain("the intro changed since the edit was rendered");
+    expect(made.notes.join()).toContain("left out the edit");
+    expect(Object.keys(made.job.reels!)).toEqual(["guest-best-30"]);
+    expect(made.job.files.some((f) => f.role === "intro")).toBe(false);
+    expect(parts(made.job)).toMatchObject({ edit: false, noIntro: true });
+    const report = preflight(made.dir, made.job, { recording: rec, probe, tools: made.job.tools, config: {} }).checks;
+    expect(report.find((c) => c.label === "the edit isn't in this bundle")).toMatchObject({ warn: true });
+    expect(selectParts(parts(made.job), []).edit).toBe(false);
+
+    // an edit rendered before intros were fingerprinted
+    setDigest(undefined);
+    made = await buildBundle({ input: reel, to: shares, probe, checkCode: false });
+    expect(made.job.edit).toMatchObject({ introUnverified: true });
+    const stamp2 = baseStamp(made.job);
+    expect(stamp2.introDigest).not.toBe(stamp1.introDigest); // a different intro: --reuse-clean won't reuse
+    expect(stamp2.introDigest).not.toBeNull();
+  });
+
+  it("refuses when there's nothing left to share", async () => {
+    const src = join(TMP, "intro-only");
+    episode(src);
+    unlinkSync(join(src, "guest.reel.json"));
+    unlinkSync(join(src, "intro.webm"));
+    await expect(buildBundle({ input: join(src, "guest.decisions.json"), to: join(TMP, "intro-only-shares"), probe, checkCode: false })).rejects.toThrow("nothing to share");
+  });
+});
+
+describe("review #63: publish", () => {
+  it("passes --link through to the shared bundle", async () => {
+    const src = join(TMP, "pub-link");
+    const { reel } = episode(src);
+    const out = await publish({ source: reel, to: join(TMP, "pub-link-dropbox"), checkCode: false, probe, link: "https://example.com/raw" });
+    expect(out.job.recording.link).toBe("https://example.com/raw");
+    expect(readJob(out.dir).recording.link).toBe("https://example.com/raw");
+  });
+
+  it("refuses rather than drop a teammate's reels when the shared copy is incomplete or newer", async () => {
+    const src = join(TMP, "pub-sync");
+    const { reel } = episode(src);
+    const shared = join(TMP, "pub-sync-dropbox");
+    const first = await publish({ source: reel, to: shared, checkCode: false, probe });
+    const jobFile = join(first.dir, "job.json");
+    const good = readFileSync(jobFile, "utf8");
+
+    writeFileSync(jobFile, good.slice(0, 40)); // half-synced
+    await expect(publish({ source: reel, to: shared, checkCode: false, probe })).rejects.toThrow("Dropbox may still be syncing");
+    writeFileSync(jobFile, JSON.stringify({ ...JSON.parse(good), version: 3 }));
+    await expect(publish({ source: reel, to: shared, checkCode: false, probe })).rejects.toThrow("newer version of the repo");
+    writeFileSync(jobFile, good);
+    renameSync(join(first.dir, "reels", "guest-best-30.reel.json"), join(TMP, "aside.reel.json"));
+    await expect(publish({ source: reel, to: shared, checkCode: false, probe })).rejects.toThrow("is listed but not there");
+    renameSync(join(TMP, "aside.reel.json"), join(first.dir, "reels", "guest-best-30.reel.json"));
+    expect((await publish({ source: reel, to: shared, checkCode: false, probe })).dir).toBe(first.dir);
+  });
+
+  it("holds a short lock while writing, and takes over a stale one", async () => {
+    const src = join(TMP, "pub-lock");
+    const { reel } = episode(src);
+    const shared = join(TMP, "pub-lock-dropbox");
+    const lock = join(shared, ".guest.publishing");
+    mkdirSync(shared, { recursive: true });
+    writeFileSync(lock, JSON.stringify({ by: "Denzo", at: new Date().toISOString() }));
+    await expect(publish({ source: reel, to: shared, checkCode: false, probe })).rejects.toThrow("Denzo is sharing guest right now");
+    writeFileSync(lock, JSON.stringify({ by: "Denzo", at: new Date(Date.now() - 11 * 60 * 1000).toISOString() }));
+    await publish({ source: reel, to: shared, checkCode: false, probe });
+    expect(existsSync(lock)).toBe(false); // released
+    const release = takeLock(join(shared, "guest"));
+    expect(existsSync(lock)).toBe(true);
+    release();
+  });
+
+  it("keeps a teammate's reel with its own commit", async () => {
+    const src = join(TMP, "pub-commit");
+    const { reel } = episode(src);
+    const shared = join(TMP, "pub-commit-dropbox");
+    mkdirSync(join(src, "theirs"));
+    const theirs = episodeReel2(src, "their-reel", join(src, "theirs", "t.reel.json"));
+    writeFileSync(renderSidecar(join(src, "theirs", "their-reel.reel.mp4")), JSON.stringify({ commit: SHA_C, dirty: false }));
+    renameSync(reel, `${reel}.aside`);
+    await buildBundle({ input: theirs, to: shared, probe, checkCode: false });
+    renameSync(`${reel}.aside`, reel);
+    const out = await publish({ source: reel, to: shared, checkCode: false, probe });
+    expect(out.job.reels!["their-reel"].commit).toBe(SHA_C);
+  });
+});
+
+describe("review #63: a nearby reel's unnamed upscale doesn't stop the bundle", () => {
+  it("leaves that reel out with a note", async () => {
+    const src = join(TMP, "unnamed");
+    const { reel } = episode(src);
+    writeFileSync(join(src, "guest.clean.1080p.mp4"), bytes(100, 5));
+    const def = JSON.parse(readFileSync(reel, "utf8"));
+    def.slug = "hd-reel";
+    def.episode.clean = "guest.clean.1080p.mp4";
+    writeFileSync(join(src, "hd.reel.json"), JSON.stringify(def));
+    const line = await autoBundle(join(src, "guest.decisions.json"), { checkCode: false, probe });
+    expect(line).toStartWith("Bundled for sharing");
+    expect(line).toContain("left out reel hd-reel: can't tell how guest.clean.1080p.mp4 was upscaled");
+    expect(Object.keys(readJob(join(src, "guest.share")).reels!)).toEqual(["guest-best-30"]);
+  });
+});
+
+describe("review #63: swapping a bundle in", () => {
+  it("builds outside the shared folder, writes job.json last, and recovers an interrupted swap", async () => {
+    const src = join(TMP, "swap");
+    const { reel } = episode(src);
+    const shares = join(TMP, "swap-shares");
+    // an earlier version's half-built sibling, and an interrupted swap: files but no job.json
+    mkdirSync(join(shares, "guest.sharing-999"), { recursive: true });
+    mkdirSync(join(shares, "guest", "media"), { recursive: true });
+    writeFileSync(join(shares, "guest", "guest.decisions.json"), "{}");
+    expect(() => readExisting(join(shares, "guest"))).toThrow("isn't a share bundle");
+    writeFileSync(join(shares, "guest", SWAP_MARK), "x");
+    expect(readExisting(join(shares, "guest"))).toBeNull();
+    const made = await buildBundle({ input: reel, to: shares, probe, checkCode: false });
+    expect(readJob(made.dir).files.length).toBe(made.job.files.length);
+    expect(existsSync(join(made.dir, SWAP_MARK))).toBe(false);
+    expect(existsSync(join(shares, "guest.sharing-999"))).toBe(false);
+    expect(readdirSync(shares)).toEqual(["guest"]);
+  });
+});
+
+describe("review #63: rebuilds stay out of the shared folder", () => {
+  it("goes to rebuilds (or ~/waterhouse-rebuilds) for a bundle in the shared folder, else next to it", () => {
+    expect(rebuildDir("/d/shares/guest", "guest", { bundles: "/d/shares" }, "/home/me")).toBe(join("/home/me", "waterhouse-rebuilds", "guest"));
+    expect(rebuildDir("/d/shares/guest", "guest", { bundles: "/d/shares", rebuilds: "/big/rebuilds" })).toBe(join("/big/rebuilds", "guest"));
+    expect(rebuildDir("/elsewhere/guest", "guest", { bundles: "/d/shares" })).toBe(join("/elsewhere/guest", "rebuild"));
+    expect(rebuildDir("/elsewhere/guest", "guest", {})).toBe(join("/elsewhere/guest", "rebuild"));
+  });
+
+  it("points the reel it renders at that rebuild", async () => {
+    const dir = join(TMP, "shares", "guest");
+    const rebuild = join(TMP, "away-rebuild");
+    mkdirSync(rebuild, { recursive: true });
+    const reelPart = parts(readJob(dir)).reels[0];
+    const def = JSON.parse(readFileSync(localReel(dir, rebuild, "guest", reelPart), "utf8"));
+    expect(def.episode).toEqual({ clean: join(rebuild, "guest.clean.mp4"), decisions: join(dir, "guest.decisions.json") });
+  });
+});
+
+describe("review #63: the received-bundle refusal says what works", () => {
+  it("suggests --to its folder, not --publish", async () => {
+    const dir = join(TMP, "auto-received", "guest");
+    const line = await autoBundle(join(dir, "reels", "guest-best-30.reel.json"), { checkCode: false, probe });
+    expect(line).toContain(`--to "${join(TMP, "auto-received")}"`);
+    expect(line).not.toContain("--publish");
+  });
+});
+
+describe("review #63: the intro fingerprint", () => {
+  it("is the same one sesh-edit records (longform/tests/test_share_hook.py pins it too)", () => {
+    const dir = join(TMP, "digest");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "intro.webm"), "video");
+    writeFileSync(join(dir, "intro.json"), '{"open_s": 1}');
+    writeFileSync(join(dir, "intro.flac"), "sound");
+    expect(introDigest(join(dir, "intro.webm"))).toBe("08313fdc53ff496287033d6e295be8c45e45c44bf986eb11f124ece7307ec206");
+  });
+});

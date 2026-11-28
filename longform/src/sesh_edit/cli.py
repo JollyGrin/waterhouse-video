@@ -503,6 +503,9 @@ def main(argv=None) -> int:
     res = render(src, info, decisions, out_mp4, out_srt, work, st, fade_ms=decisions["params"]["fade_ms"],
                  log=lambda m: log(m), out_clean=out_clean)
     decisions["render"] = {k: v for k, v in res.items() if k in ("audio_mix", "loudness", "inserts", "intro")}
+    # which code and which intro made this edit, so a share (#62) can pin them
+    from .share_hook import render_stamp
+    decisions["render"].update(render_stamp(intro_mod.resolve(decisions["intro"]["file"]) if decisions.get("intro") else None))
     out_dec.write_text(json.dumps(decisions, indent=1))
     log(f"done: {out_mp4} ({fmt_t(res['output_duration_s'])}), {out_srt}, {res['caption_lines']} caption lines")
     if out_clean:
