@@ -305,6 +305,8 @@ def main(argv=None) -> int:
     ap.add_argument("--no-intro", action="store_true", help="don't prepend the channel ident to <name>.edited.mp4")
     ap.add_argument("--intro", metavar="FILE",
                     help="ident to prepend instead of the bundled Fuse (video with alpha; see README 'Intro')")
+    ap.add_argument("--no-share", action="store_true",
+                    help="don't write the episode's local share bundle (<name>.share/) after the render")
     ap.add_argument("--no-loudnorm", action="store_true", help="skip loudness normalisation")
     ap.add_argument("--lufs", type=float, default=-14.0, help="loudness target (default -14 LUFS, true peak -1 dBTP)")
     args = ap.parse_args(argv)
@@ -505,6 +507,9 @@ def main(argv=None) -> int:
     log(f"done: {out_mp4} ({fmt_t(res['output_duration_s'])}), {out_srt}, {res['caption_lines']} caption lines")
     if out_clean:
         log(f"clean cut (no captions, for sesh-upscale + sesh-overlay): {out_clean}")
+    if not args.no_share:
+        from .share_hook import auto_bundle
+        auto_bundle(out_dec, src, log=lambda m: log(m))
     log(f"total runtime {time.time() - T_START:.0f}s")
     return 0
 

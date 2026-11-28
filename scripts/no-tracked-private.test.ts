@@ -20,6 +20,8 @@ const PRIVATE = [
   /(^|\/)share\.local\.json$/i,
   /(^|\/)rebuild\//i, // a share bundle's rebuilt cut and renders
   /(^|\/)media\/(inserts|intro|public)\//i, // a share bundle's copied clips, intro, private media
+  /\.share\//i, // an episode's local share bundle (#62)
+  /\.sharing-[^/]*\//i,
 ];
 
 // A real share link: a new-style link with rlkey= and its long random key, an
@@ -58,7 +60,10 @@ describe("no private batch material in git", () => {
         "share.local.json",
         "shares/guest-best-30/rebuild/guest.clean.mp4",
         "shares/guest-best-30/media/inserts/1-broll.mp4",
+        "sesh-out/guest.share/reels/guest-best-30.reel.json",
+        "sesh-out/guest.share.sharing-123/README.txt",
         "package.json",
+        "scripts/share/auto.ts",
         "scripts/share/job.ts",
         "longform/src/sesh_edit/batch.py",
         "longform/tests/test_batch.py",
@@ -78,6 +83,8 @@ describe("no private batch material in git", () => {
       "share.local.json",
       "shares/guest-best-30/rebuild/guest.clean.mp4",
       "shares/guest-best-30/media/inserts/1-broll.mp4",
+      "sesh-out/guest.share/reels/guest-best-30.reel.json",
+      "sesh-out/guest.share.sharing-123/README.txt",
     ]);
   });
 

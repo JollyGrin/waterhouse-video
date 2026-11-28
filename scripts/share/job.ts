@@ -28,7 +28,8 @@ import { findBin } from "../lib/ff";
 import { isPrivate, PRIVATE_MEDIA } from "../private-media";
 import { findMediaRefs, readSources, ROOT } from "../template-media";
 
-export const JOB_VERSION = 1;
+/** 2: one bundle per episode, the edit and its reels (#62). 1: one reel or one edit (#60), still read. */
+export const JOB_VERSION = 2;
 /** The fast fingerprint reads this much from each end of the recording. */
 export const FINGERPRINT_CHUNK = 16 * 1024 * 1024;
 
@@ -58,7 +59,8 @@ export type PinnedFile = {
 
 export type Job = {
   version: number;
-  kind: "reel" | "edit";
+  /** Version 1 only: what the bundle held. A version 2 bundle holds the edit and `reels`. */
+  kind?: "reel" | "edit";
   created: string;
   by?: string;
   /** The reel's slug, or the edit's name: also the bundle folder's name. */
@@ -69,11 +71,40 @@ export type Job = {
   tools: Tools;
   recording: PinnedRecording;
   files: PinnedFile[];
-  /** A reel share: the clean cut the reel was cut from (its `shots` are in its pixels). */
+  /** Version 1 reel: the clean cut the reel was cut from (its `shots` are in its pixels). */
   clean?: CleanSpec;
-  /** The sharer's own render, for comparison only (bit-identical output isn't promised). */
+  /** Version 1: the sharer's own render, for comparison only (bit-identical output isn't promised). */
   reference?: Output;
+  /** Version 2: the full edit (always there: every episode gets one). */
+  edit?: { reference?: Output };
+  /** Version 2: every reel shared from this episode, by slug: reels/<slug>.reel.json. */
+  reels?: Record<string, { clean: CleanSpec; reference?: Output }>;
 };
+
+/** One reel in a bundle, whatever its version. */
+export type ReelPart = { slug: string; def: string; clean: CleanSpec; reference?: Output };
+
+/** What a bundle renders: the edit (with its intro) and/or reels, the same for both versions. */
+export type Parts = { edit: boolean; editReference?: Output; reels: ReelPart[]; noIntro: boolean };
+
+export function parts(job: Job): Parts {
+  if (job.version === 1) {
+    if (job.kind === "reel")
+      return { edit: false, noIntro: true, reels: [{ slug: job.name, def: `${job.name}.reel.json`, clean: job.clean!, reference: job.reference }] };
+    return { edit: true, editReference: job.reference, noIntro: false, reels: [] };
+  }
+  return {
+    edit: true,
+    editReference: job.edit?.reference,
+    noIntro: false,
+    reels: Object.entries(job.reels ?? {})
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([slug, r]) => ({ slug, def: reelDefPath(slug), clean: r.clean, reference: r.reference })),
+  };
+}
+
+/** Where a version 2 bundle keeps a reel's definition. */
+export const reelDefPath = (slug: string) => `reels/${slug}.reel.json`;
 
 /**
  * The clean cut a reel reads: sesh-edit's own (`none`, the recording's frame size) or an
@@ -319,8 +350,10 @@ export function readJob(bundle: string): Job {
 
 export function jobProblems(job: Partial<Job>): string[] {
   const out: string[] = [];
-  if (job.version !== JOB_VERSION) out.push(`version ${job.version}, this repo reads version ${JOB_VERSION} (get the latest work)`);
-  if (job.kind !== "reel" && job.kind !== "edit") out.push(`kind ${JSON.stringify(job.kind)}`);
+  if (job.version !== 1 && job.version !== JOB_VERSION)
+    out.push(`version ${job.version}, this repo reads versions 1 and ${JOB_VERSION} (get the latest work)`);
+  if (job.version === 1 && job.kind !== "reel" && job.kind !== "edit") out.push(`kind ${JSON.stringify(job.kind)}`);
+  if (job.version === JOB_VERSION && (typeof job.reels !== "object" || job.reels === null || Array.isArray(job.reels))) out.push("no reels map");
   if (!job.name || !job.episode) out.push("no name or episode");
   else if (!SAFE_NAME.test(job.name) || !SAFE_NAME.test(job.episode)) out.push(`name ${JSON.stringify(job.name)} / episode ${JSON.stringify(job.episode)}: letters, digits, - and _ only`);
   if (!job.repo?.commit || !/^[0-9a-f]{40}$/.test(job.repo.commit)) out.push("no repo commit");
@@ -335,14 +368,17 @@ export function jobProblems(job: Partial<Job>): string[] {
         out.push(`file entry ${JSON.stringify(f.path)}: public/${f.publicPath} isn't on the private list`);
     // the files the rerender reads by name
     const need: [string, FileRole][] = [[`${job.episode}.decisions.json`, "decisions"]];
-    if (job.kind === "reel") need.push([`${job.name}.reel.json`, "reel"]);
+    if (job.version === 1 && job.kind === "reel") need.push([`${job.name}.reel.json`, "reel"]);
+    for (const slug of Object.keys(job.version === JOB_VERSION ? job.reels ?? {} : {}))
+      if (!SAFE_NAME.test(slug)) out.push(`reel ${JSON.stringify(slug)}: letters, digits, - and _ only`);
+      else need.push([reelDefPath(slug), "reel"]);
     for (const [path, role] of need)
       if (!job.files.some((f) => f.path === path && f.role === role)) out.push(`no ${role} entry ${path}`);
   }
-  if (job.kind === "reel") {
-    const c = job.clean;
-    if (!c || !(c.width > 0) || !(c.height > 0) || !["none", "lanczos", "x4plus"].includes(c.method)) out.push("the reel's clean cut isn't pinned");
-  }
+  const cleans: [string, CleanSpec | undefined][] =
+    job.version === 1 ? (job.kind === "reel" ? [[job.name ?? "", job.clean]] : []) : Object.entries(job.reels ?? {}).map(([k, r]) => [k, r?.clean]);
+  for (const [slug, c] of cleans)
+    if (!c || !(c.width > 0) || !(c.height > 0) || !["none", "lanczos", "x4plus"].includes(c.method)) out.push(`the clean cut of reel ${slug} isn't pinned`);
   return out;
 }
 
@@ -406,8 +442,9 @@ export function preflight(bundle: string, job: Job, opts: PreflightOptions = {})
     else checks.push({ label: `${f.role} ${f.path}`, ok: true });
   }
 
-  if (job.clean) checks.push(cleanCheck(job.clean));
-  if (job.kind === "reel") checks.push(packagesCheck(root));
+  const reels = parts(job).reels;
+  for (const c of distinctCleans(reels)) checks.push(cleanCheck(c));
+  if (reels.length) checks.push(packagesCheck(root));
   checks.push(toolsCheck(job.tools, opts.tools ?? toolVersions()));
   return { checks, recording };
 }
@@ -450,6 +487,13 @@ export function codeCheck(commit: string, root = ROOT): Check {
 }
 
 /* ---------- the clean cut, and the rebuild ---------- */
+
+/** Each clean cut the reels need, once. */
+export function distinctCleans(reels: { clean: CleanSpec }[]): CleanSpec[] {
+  const seen = new Map<string, CleanSpec>();
+  for (const r of reels) seen.set(JSON.stringify(r.clean), r.clean);
+  return [...seen.values()];
+}
 
 /** The rebuilt clean cut's file name the shared reel definition reads. */
 export function cleanFileName(episode: string, clean: CleanSpec): string {
@@ -507,16 +551,22 @@ export function packagesCheck(root = ROOT): Check {
   return off.length ? { label, ok: false, detail: [...off.slice(0, 6), "run bun install --frozen-lockfile"] } : { label, ok: true };
 }
 
-/** What the clean cut in rebuild/ was made from; --reuse-clean reuses it only when this matches. */
-export type RebuildStamp = { decisions: string; recording: string; clean: CleanSpec | null; intro: boolean };
+/**
+ * What rebuild/ was made from; --reuse-clean reuses the clean cut only when this matches,
+ * and an upscale only when it's also listed in `upscales`.
+ */
+export type RebuildStamp = { decisions: string; recording: string; intro: boolean; upscales: string[] };
 
 export const STAMP_FILE = "rebuild.json";
 
-export function stampMatches(rebuild: string, want: RebuildStamp): boolean {
+/** The stamp in rebuild/, if it was made from the same decisions, recording and intro choice; else null. */
+export function readStamp(rebuild: string, want: Omit<RebuildStamp, "upscales">): RebuildStamp | null {
   try {
-    return JSON.stringify(JSON.parse(readFileSync(join(rebuild, STAMP_FILE), "utf8"))) === JSON.stringify(want);
+    const got = JSON.parse(readFileSync(join(rebuild, STAMP_FILE), "utf8")) as RebuildStamp;
+    const same = got.decisions === want.decisions && got.recording === want.recording && got.intro === want.intro;
+    return same ? { ...got, upscales: Array.isArray(got.upscales) ? got.upscales : [] } : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -553,9 +603,18 @@ export function bundleDir(name: string, to: string | undefined, config: LocalCon
       `where should the bundle go? Pass --to <folder>, or set "bundles" in ${CONFIG_FILE} at the repo root ` +
         `(e.g. {"bundles": "<your Dropbox>/Waterhouse/shares"}).`,
     );
-  const dir = resolve(base, name);
+  return checkOutsideRepo(resolve(base, name), root);
+}
+
+/** The local, not-yet-shared bundle of an episode: next to its outputs (#62). */
+export const localBundleDir = (decisionsPath: string, episode: string) => join(dirname(decisionsPath), `${episode}.share`);
+
+/** `dir`, unless it's inside the repo and git would track it (the repo is public). */
+export function checkOutsideRepo(dir: string, root = ROOT): string {
   const rel = relative(resolve(root), dir);
-  if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel)))
+  const inside = rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+  // inside is fine only when gitignored, like a local bundle in out/ or a *.share/ folder
+  if (inside && (rel === "" || !git(["check-ignore", "-q", "--no-index", rel.split("\\").join("/") + "/"], root).ok))
     throw new Error(`${dir} is inside the repo, which is public: put share bundles outside it (e.g. your Dropbox)`);
   return dir;
 }
