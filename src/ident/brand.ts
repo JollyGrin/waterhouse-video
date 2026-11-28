@@ -18,6 +18,10 @@ export const C = {
   mint: "#2ECC71",
 } as const;
 
+// The one approved off-brand colour: YouTube's own red, for the play button in the reel's
+// YouTube banner (src/reel/YouTubeBanner.tsx) and nowhere else (Dean, 2026-11-28; AGENTS.md "House style").
+export const YOUTUBE_RED = "#FF0000";
+
 // Brutal border + offset shadow scale (px at 1x web; scale for 1080w video).
 export const BORDER = 3;
 export const SHADOW = { sm: 3, md: 6, lg: 10, xl: 14 } as const;

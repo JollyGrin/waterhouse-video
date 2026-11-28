@@ -36,7 +36,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { findBin } from "../lib/ff";
 import { CENTRE, centreCrop, cropProblems, type Crop, type SourceSize } from "../../src/reel/crop";
 import { FPS } from "../../src/reel/theme";
-import { reelTiming, type ReelBanner, type ReelIntro, type ReelOutro, type SessionReelProps } from "../../src/reel/SessionReel";
+import { reelBanner, reelTiming, type ReelBanner, type ReelIntro, type ReelOutro, type SessionReelProps } from "../../src/reel/SessionReel";
 import { FUSE_DRUMS_AUDIO } from "../../src/ident/Fuse";
 // (the YouTube bumper's sound is placed by SessionReel; only its gain is worked out here)
 import { seshCaptionWords, TimeMap, type CaptionWord, type SeshDecisions } from "./sesh";
@@ -74,7 +74,7 @@ export type ReelDef = {
   intro?: ReelIntro;
   /** Default "youtube" (the YouTube end bumper); "card" is the old end card. */
   outro?: ReelOutro;
-  /** "youtube": a "full interview on YouTube" banner over the whole clip. Default "none". */
+  /** "youtube" (default): a "full interview on YouTube" banner over the whole clip. "none" turns it off. */
   banner?: ReelBanner;
   /** Named crop windows into the source, in source pixels. "centre" is always there. */
   shots?: Record<string, Crop>;
@@ -351,7 +351,7 @@ async function main() {
     introGainDb: gain,
     outro,
     outroGainDb: outroGain,
-    banner: def.banner ?? "none",
+    banner: reelBanner(def.banner),
     artist: def.artist,
     episodeLabel: def.episodeLabel,
     cta: def.cta,

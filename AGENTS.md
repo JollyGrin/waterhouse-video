@@ -251,7 +251,10 @@ So everyone's work looks like it comes from the same place:
   Mono One (display) and JetBrains Mono (mono), the colour tokens `C.*`
   (paper, ink, grays, the yellow `#FFD400` accent) and the mark's paths.
   Import them; don't paste new hex codes or load other fonts without asking
-  the user, and mention it in the PR.
+  the user, and mention it in the PR. **One exception:** YouTube red
+  `#FF0000` (`YOUTUBE_RED` in `brand.ts`) is approved (Dean, 2026-11-28)
+  for the play button in the reel's YouTube banner
+  (`src/reel/YouTubeBanner.tsx`), and only there.
 - **Tone: adult, gritty, restrained.** Mostly black, paper and greys, with
   at most one accent colour used sparingly. Grain and texture, weighty
   motion and hard cuts rather than bouncy springs. The grit comes from
@@ -400,7 +403,7 @@ episode's intro is now sesh-edit's job.
 `SessionReel` (`src/reel/`) turns a finished sesh-edit interview into a 20–30 s
 Instagram reel: Fuse-Drums 9:16 in front (the clip opens under its rings at frame
 118, like the 16:9 intro), the clip cropped to 9:16 and cut between the speakers,
-karaoke captions, the YouTube end bumper (`ReelOutro-YouTube`, "WITH <ARTIST>" from the definition's `artist`), mastered to −14 LUFS / −1 dBTP, h264 + aac,
+karaoke captions, a "Full interview on YouTube" banner over the clip (on by default; `"banner": "none"` in the definition turns it off), the YouTube end bumper (`ReelOutro-YouTube`, "WITH <ARTIST>" from the definition's `artist`), mastered to −14 LUFS / −1 dBTP, h264 + aac,
 `+faststart`. `scripts/reel/make-reel.ts` builds it from a reel definition. The
 full walk-through is `longform/README.md`, "A reel from an episode". In short:
 

@@ -1,6 +1,6 @@
 import React from "react";
 import { Easing, interpolate } from "remotion";
-import { C, FONT_DISPLAY, FONT_MONO } from "../ident/brand";
+import { C, FONT_DISPLAY, FONT_MONO, YOUTUBE_RED } from "../ident/brand";
 import { FPS } from "./theme";
 
 /**
@@ -11,7 +11,7 @@ import { FPS } from "./theme";
  * Instagram's top bar and right rail. It wipes on hard when the intro has gone, then holds still apart
  * from a short scope flicker every few seconds (Fuse's beam, briefly brighter) so it keeps catching
  * the eye without moving around. The YouTube end bumper still plays after the clip.
- * Opt-in per reel: `"banner": "youtube"` in the reel definition.
+ * On every reel by default (Dean, 28 Nov 2026); `"banner": "none"` in the reel definition turns it off.
  */
 
 /** Where the banner sits, in reel pixels. Top clears the bug (BUG in theme.ts); right edge clears the rail. */
@@ -26,9 +26,6 @@ export const BANNER = {
   titleSize: 50,
   subSize: 25,
 } as const;
-
-/** YouTube's own red, for its play button only (not a house colour). */
-const YT_RED = "#FF0000";
 
 const T = {
   /** Frames of the wipe-on. */
@@ -111,7 +108,7 @@ export const YouTubeBanner: React.FC<YouTubeBannerProps> = ({
           viewBox="0 0 100 70"
           style={{ filter: iconGlow, flexShrink: 0 }}
         >
-          <rect x={0} y={0} width={100} height={70} rx={18} fill={YT_RED} />
+          <rect x={0} y={0} width={100} height={70} rx={18} fill={YOUTUBE_RED} />
           <path d="M40 20 L68 35 L40 50 Z" fill="#ffffff" />
         </svg>
         <div
