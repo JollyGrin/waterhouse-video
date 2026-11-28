@@ -12,13 +12,14 @@
  */
 
 import { resolve } from "node:path";
-import { formatReport, preflight, readJob } from "./job";
+import { formatReport, parts, preflight, readJob } from "./job";
 
 export function parseBundleArgs(argv: string[], usage: string) {
-  const out: { bundle?: string; recording?: string; flags: Set<string> } = { flags: new Set() };
+  const out: { bundle?: string; recording?: string; flags: Set<string>; only: string[] } = { flags: new Set(), only: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--recording") out.recording = argv[++i];
+    else if (a === "--only") out.only.push(...(argv[++i] ?? "").split(",").filter(Boolean));
     else if (a.startsWith("--")) out.flags.add(a);
     else out.bundle = a;
   }
@@ -27,19 +28,21 @@ export function parseBundleArgs(argv: string[], usage: string) {
 }
 
 /** Prints the report; true when reproducible. */
-export function runPreflight(bundle: string, recording?: string) {
+export function runPreflight(bundle: string, recording?: string, select?: string[]) {
   const job = readJob(bundle);
-  console.log(`Share: ${job.kind} "${job.name}"${job.by ? ` by ${job.by}` : ""}, ${job.created.slice(0, 10)}\n`);
-  const res = preflight(bundle, job, { recording });
+  const p = parts(job);
+  const what = [p.edit ? "the edit" : "", ...p.reels.map((r) => `reel ${r.slug}`)].filter(Boolean).join(", ");
+  console.log(`Share "${job.episode}": ${what}${job.by ? `, by ${job.by}` : ""}, ${job.created.slice(0, 10)}\n`);
+  const res = preflight(bundle, job, { recording, select });
   const report = formatReport(res.checks);
   console.log(report.text);
-  return { job, recording: res.recording, reproducible: report.reproducible };
+  return { job, recording: res.recording, reproducible: report.reproducible, checks: res.checks };
 }
 
 if (/preflight\.ts$/.test(process.argv[1] ?? "")) {
   try {
     const args = parseBundleArgs(process.argv.slice(2), "bun run preflight <bundle> [--recording <file>]");
-    if (args.flags.size) throw new Error(`unknown option ${[...args.flags][0]}`);
+    if (args.flags.size || args.only.length) throw new Error(`unknown option ${[...args.flags][0] ?? "--only"}`);
     if (!runPreflight(args.bundle, args.recording).reproducible) process.exit(1);
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);

@@ -76,3 +76,7 @@ rebuild/
 media/inserts/
 media/intro/
 media/public/
+# an episode's local, not-yet-shared bundle next to its outputs (#62), and a bundle being built
+*.share/
+*.sharing-*/
+*.render.json

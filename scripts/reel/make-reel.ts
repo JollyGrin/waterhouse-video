@@ -1,7 +1,11 @@
 /**
  * Cuts a vertical (9:16) Instagram reel out of a finished interview.
  *
- *   bun run reel <name>.reel.json [--cut-only] [--reuse-cut] [--out <file.mp4>]
+ *   bun run reel <name>.reel.json [--cut-only] [--reuse-cut] [--out <file.mp4>] [--no-share]
+ *
+ * After a render of a sesh-edit episode's reel, the episode's local share bundle
+ * (<name>.share/ next to its outputs, nothing sent) is written or refreshed (#62,
+ * scripts/share/auto.ts); --no-share skips that. It never fails the render.
  *
  * A reel is: the Fuse-Drums intro (9:16), the clip opening under its tail, cropped to
  * 9:16 with big karaoke captions, then the end card. Three stages, because they answer
@@ -40,6 +44,10 @@ import { reelBanner, reelTiming, type ReelBanner, type ReelIntro, type ReelOutro
 import { FUSE_DRUMS_AUDIO } from "../../src/ident/Fuse";
 // (the YouTube bumper's sound is placed by SessionReel; only its gain is worked out here)
 import { seshCaptionWords, TimeMap, type CaptionWord, type SeshDecisions } from "./sesh";
+import { renderVersion } from "../share/job";
+
+/** Where a render records the code it was made with: <reel minus .mp4>.render.json. */
+export const renderSidecar = (output: string) => `${output.replace(/\.mp4$/i, "")}.render.json`;
 
 export type Segment = { start: number; end: number; shot?: string; note?: string };
 /**
@@ -203,18 +211,19 @@ async function probeSize(file: string): Promise<SourceSize & { duration: number 
 }
 
 const parseArgs = (argv: string[]) => {
-  const flags = new Set(["--cut-only", "--reuse-cut"]);
-  const out: { def?: string; cutOnly: boolean; reuseCut: boolean; out?: string } = { cutOnly: false, reuseCut: false };
+  const flags = new Set(["--cut-only", "--reuse-cut", "--no-share"]);
+  const out: { def?: string; cutOnly: boolean; reuseCut: boolean; noShare: boolean; out?: string } = { cutOnly: false, reuseCut: false, noShare: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--out") out.out = argv[++i];
     else if (flags.has(a)) {
       if (a === "--cut-only") out.cutOnly = true;
+      else if (a === "--no-share") out.noShare = true;
       else out.reuseCut = true;
     } else if (a.startsWith("--")) throw new Error(`unknown option ${a}`);
     else out.def = a;
   }
-  if (!out.def) throw new Error("usage: bun run reel <name>.reel.json [--cut-only] [--reuse-cut] [--out <file.mp4>]");
+  if (!out.def) throw new Error("usage: bun run reel <name>.reel.json [--cut-only] [--reuse-cut] [--out <file.mp4>] [--no-share]");
   return out;
 };
 
@@ -451,6 +460,15 @@ async function main() {
     throw new Error(`${output} missed the loudness target: ${final.i.toFixed(2)} LUFS, ${final.tp.toFixed(2)} dBTP`);
   }
   console.log(`Done: ${output}`);
+  // which code made this reel, for a share (#62 review): <output minus .mp4>.render.json
+  writeFileSync(renderSidecar(output), JSON.stringify({ ...renderVersion("reel"), at: new Date().toISOString() }, null, 1));
+
+  /* ---------- bundle it for sharing (#62): one line, never fails the render ---------- */
+
+  if (def.episode && !args.noShare) {
+    const { autoBundle } = await import("../share/auto");
+    console.log(await autoBundle(defPath));
+  }
 }
 
 if (/make-reel\.ts$/.test(process.argv[1] ?? "")) {
