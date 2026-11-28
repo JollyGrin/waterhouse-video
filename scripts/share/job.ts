@@ -160,7 +160,7 @@ export function recordingProblems(pin: PinnedRecording, file: string, probe = pr
   if (Math.abs(info.fps - pin.fps) > 0.01) out.push(`${name} is ${info.fps.toFixed(3)} fps, the shared one was ${pin.fps.toFixed(3)} fps`);
   if (info.width !== pin.width || info.height !== pin.height)
     out.push(`${name} is ${info.width}x${info.height}, the shared one was ${pin.width}x${pin.height}`);
-  if (out.length) out.unshift(`WRONG RECORDING: ${file}`);
+  if (out.length) out.unshift("WRONG RECORDING: not the one that was shared");
   return out;
 }
 
@@ -367,6 +367,9 @@ export function preflight(bundle: string, job: Job, opts: PreflightOptions = {})
   return { checks, recording };
 }
 
+/** What a render can't depend on, so it may differ from the pinned commit. */
+export const CODE_EXCLUDES = ["*.md", "**/*.test.ts", "**/*.test.tsx", "scripts/share/**", "longform/tests/**", ".github/**"];
+
 /** Is the pinned commit here, and does this checkout's code match it? */
 export function codeCheck(commit: string, root = ROOT): Check {
   const label = `code at ${commit.slice(0, 7)}`;
@@ -377,8 +380,9 @@ export function codeCheck(commit: string, root = ROOT): Check {
       detail: ["that commit isn't on this computer: get the latest work (git fetch). If it's still missing, the sender never pushed it."],
     };
   const head = git(["rev-parse", "HEAD"], root).out;
-  // Working tree against the commit, so unsaved edits count too. Docs can't change a render.
-  const diff = git(["diff", "--name-only", commit, "--", ".", ":(exclude)*.md"], root);
+  // Working tree against the commit, so unsaved edits count too. Docs, tests and these
+  // share scripts can't change a render.
+  const diff = git(["diff", "--name-only", commit, "--", ".", ...CODE_EXCLUDES.map((p) => `:(exclude)${p}`)], root);
   const files = diff.out ? diff.out.split("\n") : [];
   if (files.length === 0) return { label, ok: true, detail: head === commit ? undefined : ["checked out elsewhere, but the code is the same"] };
   return {
