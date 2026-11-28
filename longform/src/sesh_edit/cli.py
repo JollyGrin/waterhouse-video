@@ -63,6 +63,44 @@ def apply_replacements(words: list[dict], pairs: list[str]) -> tuple[list[dict],
     return words, done
 
 
+def adopt_recording(decisions: dict, src: str, info: dict, check_intro: bool = True) -> None:
+    """Point decisions made on another computer at this computer's copy of the recording.
+
+    Checks the recording is the same one (length, frame rate, frame size) and that the other
+    files the decisions name by absolute path (inserted clips, a custom intro) exist here.
+    Raises SystemExit naming what doesn't match; on success updates input and input_info."""
+    name = Path(src).name
+    want = decisions.get("stats", {}).get("input_duration_s")
+    if want is None:
+        log(f"warning: these decisions don't record the recording's length; can't check {name} is the same file")
+    elif abs(info["duration"] - want) > 0.5:
+        raise SystemExit(f"{name} is {info['duration']:.2f}s but these decisions were made on a "
+                         f"{want:.2f}s recording: not the same file.")
+    old = decisions.get("input_info") or {}
+    if "fps" in old and abs(info["fps"] - old["fps"]) > 0.01:
+        raise SystemExit(f"{name} is {info['fps']:.3f} fps but these decisions were made on a "
+                         f"{old['fps']:.3f} fps recording: not the same file (or a re-encoded copy).")
+    if "width" in old and "height" in old and (info["width"], info["height"]) != (old["width"], old["height"]):
+        raise SystemExit(f"{name} is {info['width']}x{info['height']} but these decisions were made on a "
+                         f"{old['width']}x{old['height']} recording: not the same file (or a resized copy).")
+
+    missing = [it["path"] for it in decisions.get("inserts", [])
+               if it.get("kind") == "clip" and not Path(it["path"]).exists()]
+    if missing:
+        raise SystemExit("these decisions insert clips that aren't on this computer:\n  " + "\n  ".join(missing) +
+                         "\nPut each clip on this computer and change its \"path\" under \"inserts\" in the "
+                         "decisions file to where it is now, then run this again.")
+    intro = decisions.get("intro")
+    if check_intro and intro and Path(intro["file"]).expanduser().is_absolute() \
+            and not Path(intro["file"]).expanduser().exists():
+        raise SystemExit(f"these decisions use a custom intro that isn't on this computer: {intro['file']}\n"
+                         "Put it on this computer and pass --intro <file>, change \"file\" under \"intro\" in "
+                         "the decisions file, or pass --no-intro.")
+
+    decisions["input"] = src
+    decisions["input_info"] = info
+
+
 def resolve_inserts(args, keeps: list[list[float]], off: float, words_v: list[dict], audio_v: np.ndarray) -> list[dict]:
     """--insert-clip / --title-card -> inserts placed before a keep segment index.
 
@@ -273,6 +311,7 @@ def main(argv=None) -> int:
 
     src = str(Path(args.input).expanduser().resolve())
     decisions_in = None
+    info = None
     if args.from_decisions:
         decisions_in = json.loads(Path(args.from_decisions).read_text())
         if Path(args.input).suffix.lower() == ".json":
@@ -280,12 +319,8 @@ def main(argv=None) -> int:
         else:
             # A recording given by hand wins over the decisions' own path, so an edit made on one
             # computer re-renders on another where the same recording lives somewhere else.
-            want = decisions_in.get("stats", {}).get("input_duration_s")
-            got = media.probe(src)["duration"]
-            if want is not None and abs(got - want) > 0.5:
-                raise SystemExit(f"{Path(src).name} is {got:.2f}s but these decisions were made on a "
-                                 f"{want:.2f}s recording: not the same file.")
-            decisions_in["input"] = src
+            info = media.probe(src)
+            adopt_recording(decisions_in, src, info, check_intro=not args.no_intro and not args.intro)
     inp = Path(src)
     out_mp4 = Path(args.output).expanduser().resolve() if args.output else inp.with_name(inp.name + ".edited.mp4")
     base = out_mp4.with_suffix("")
@@ -300,7 +335,8 @@ def main(argv=None) -> int:
     work.mkdir(parents=True, exist_ok=True)
     out_mp4.parent.mkdir(parents=True, exist_ok=True)
 
-    info = media.probe(src)
+    if info is None:
+        info = media.probe(src)
     log(f"input: {inp.name}  {info['width']}x{info['height']} @{info['fps']:.2f}fps  {fmt_t(info['duration'])}")
     st = Style(font_px_1080=args.font_px)
     params = Params(silence_max=args.silence_max, silence_target=args.silence_target, silence_db=args.silence_db)

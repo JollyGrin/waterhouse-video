@@ -91,6 +91,13 @@ export const TARGET_LUFS = -14;
 export const TARGET_TP = -1;
 
 /** Snap a time onto the reel's frame grid (see stage 1). */
+/** The definition's banner, defaulted; a typo like "yt" fails loudly instead of rendering no banner. */
+export function resolveBanner(banner: unknown): ReelBanner {
+  if (banner === undefined) return reelBanner(undefined);
+  if (banner === "youtube" || banner === "none") return banner;
+  throw new Error(`"banner": ${JSON.stringify(banner)} isn't a banner: use "youtube" (the default) or "none"`);
+}
+
 export const snap = (t: number) => Math.round(t * FPS) / FPS;
 
 /** The crop for every span, by shot name; unknown names are an error. */
@@ -217,6 +224,7 @@ async function main() {
   const def: ReelDef = await Bun.file(defPath).json();
   const intro: ReelIntro = def.intro ?? "fuse-drums";
   const outro: ReelOutro = def.outro ?? "youtube";
+  const banner = resolveBanner(def.banner);
 
   /* ---------- the source, and its words in source time ---------- */
 
@@ -351,7 +359,7 @@ async function main() {
     introGainDb: gain,
     outro,
     outroGainDb: outroGain,
-    banner: reelBanner(def.banner),
+    banner,
     artist: def.artist,
     episodeLabel: def.episodeLabel,
     cta: def.cta,

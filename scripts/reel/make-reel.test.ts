@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { introGainDb, outroGainDb, rebaseCaptions, resolveCrops, snap } from "./make-reel";
+import { introGainDb, outroGainDb, rebaseCaptions, resolveBanner, resolveCrops, snap } from "./make-reel";
 import { centreCrop, cropProblems } from "../../src/reel/crop";
 import { reelBanner, reelTiming, INTRO_OPEN_FRAME } from "../../src/reel/SessionReel";
 import { YOUTUBE_OUTRO_FRAMES } from "../../src/reel/outro/YouTubeOutro";
@@ -54,6 +54,10 @@ describe("make-reel (#55)", () => {
     expect(reelBanner(undefined)).toBe("youtube");
     expect(reelBanner("youtube")).toBe("youtube");
     expect(reelBanner("none")).toBe("none");
+    expect(resolveBanner(undefined)).toBe("youtube");
+    expect(resolveBanner("none")).toBe("none");
+    expect(() => resolveBanner("yt")).toThrow(/"youtube".*"none"/);
+    expect(() => resolveBanner(true)).toThrow(/banner/);
   });
 
   it("matches the intro to the clip, capped by its true peak", () => {

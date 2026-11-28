@@ -196,7 +196,11 @@ checks that the clean cut's length matches the decisions.
 
 **On another computer**, where the recording lives somewhere else: pass the recording
 instead of the decisions file as the first argument. It replaces the path stored in the
-decisions, after a check that its length matches:
+decisions, after a check that its length, frame rate and frame size match. Clips added with
+`--insert-clip` (and a custom `--intro`) are stored by their full path on the computer that
+made the edit: sesh-edit stops and names any that aren't there. Put each one on this
+computer and change its `"path"` under `"inserts"` (or `"file"` under `"intro"`) in the
+decisions file; for the intro, `--intro <file>` or `--no-intro` also works.
 
 ```sh
 uv run sesh-edit <recording>.mp4 --from-decisions <name>.decisions.json --no-intro -o <scratch>/<name>.edited.mp4
@@ -206,7 +210,8 @@ uv run sesh-edit <recording>.mp4 --from-decisions <name>.decisions.json --no-int
 repo with the `.reel.json`, the episode's `.decisions.json` and a `README.txt`, with the
 reel's `episode.clean` pointing at `rebuild/<name>.clean.mp4`. The recording is not in it;
 whoever renders has it already. Rebuild the clean cut into `<folder>/rebuild/` as above,
-then `bun run reel <folder>/<slug>.reel.json`.
+then from the repo root `bun run reel <folder>/<slug>.reel.json` (use the folder's absolute
+path, so it means the same thing from `longform/` and from the root).
 
 **Steps** (from the repo root; keep everything for a real interview outside the repo, e.g.
 `C:\Users\<you>\Videos\sesh-out\reel\`):
