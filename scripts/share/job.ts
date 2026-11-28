@@ -311,6 +311,8 @@ export function jobProblems(job: Partial<Job>): string[] {
     for (const f of job.files)
       if (!f.path || isAbsolute(f.path) || f.path.split("/").includes("..") || !/^[0-9a-f]{64}$/.test(f.sha256 ?? ""))
         out.push(`file entry ${JSON.stringify(f.path)}`);
+      else if (f.publicPath !== undefined && (f.publicPath.split("/").includes("..") || isAbsolute(f.publicPath) || !isPrivate(f.publicPath)))
+        out.push(`file entry ${JSON.stringify(f.path)}: public/${f.publicPath} isn't on the private list`);
   return out;
 }
 

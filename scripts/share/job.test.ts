@@ -95,6 +95,8 @@ describe("share → job.json → preflight", async () => {
   it("round-trips the manifest", () => {
     expect(readJob(dir)).toEqual(JSON.parse(JSON.stringify(job)));
     expect(jobProblems(job)).toEqual([]);
+    const evil = { ...job, files: [{ ...job.files[0], publicPath: "../src/Root.tsx" }] };
+    expect(jobProblems(evil)[0]).toContain("isn't on the private list");
     expect(job.kind).toBe("reel");
     expect(job.name).toBe("guest-best-30");
     expect(job.recording).toMatchObject({ name: "guest.mp4", bytes: 5000, link: "https://example.com/rec", ...INFO });
@@ -117,7 +119,7 @@ describe("share → job.json → preflight", async () => {
   });
 
   it("refuses to overwrite a bundle unless asked", async () => {
-    expect(buildBundle({ input: reel, to: join(TMP, "shares"), probe, checkCode: false })).rejects.toThrow("--replace");
+    await expect(buildBundle({ input: reel, to: join(TMP, "shares"), probe, checkCode: false })).rejects.toThrow("--replace");
   });
 
   const run = (recording: string, tools = job.tools) =>
@@ -173,14 +175,14 @@ describe("an edit share", () => {
     const d = JSON.parse(readFileSync(decisions, "utf8"));
     d.intro.file = join(src, "missing-intro.webm");
     writeFileSync(decisions, JSON.stringify(d));
-    expect(buildBundle({ input: decisions, to: join(TMP, "edit-shares"), probe, checkCode: false })).rejects.toThrow("intro isn't on this computer");
+    await expect(buildBundle({ input: decisions, to: join(TMP, "edit-shares"), probe, checkCode: false })).rejects.toThrow("intro isn't on this computer");
   });
 
   it("refuses a recording the edit wasn't made from", async () => {
     const src = join(TMP, "edit2");
     const { reel } = episode(src);
     const wrong = () => ({ ...INFO, duration: 900 });
-    expect(buildBundle({ input: reel, to: join(TMP, "x"), probe: wrong, checkCode: false })).rejects.toThrow("isn't the recording");
+    await expect(buildBundle({ input: reel, to: join(TMP, "x"), probe: wrong, checkCode: false })).rejects.toThrow("isn't the recording");
     expect(decisionsMismatch({ input: "", input_info: INFO }, { ...INFO, fps: 30 })).toContain("fps");
   });
 });
@@ -199,7 +201,7 @@ describe("the code a share pins", () => {
 
   it("refuses a commit that isn't pushed", async () => {
     expect(codeRefusal(repo)).toContain("isn't backed up online");
-    expect(buildBundle({ input: join(TMP, "sharer", "guest.reel.json"), to: join(TMP, "y"), root: repo, probe })).rejects.toThrow("Can't share yet");
+    await expect(buildBundle({ input: join(TMP, "sharer", "guest.reel.json"), to: join(TMP, "y"), root: repo, probe })).rejects.toThrow("Can't share yet");
   });
 
   it("accepts a clean, pushed checkout", () => {

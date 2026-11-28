@@ -80,6 +80,7 @@ export async function buildBundle(opts: ShareOptions): Promise<{ dir: string; jo
   const decisions = (await Bun.file(decisionsPath).json()) as SeshDecisionsLite;
   const episode = basename(decisionsPath).replace(/\.decisions\.json$/, "");
   const name = def ? def.slug : episode;
+  if (!/^[\w.-]+$/.test(name) || name.startsWith(".")) throw new Error(`"${name}" can't be a folder name: use letters, digits, - and _ only`);
 
   /* ---------- the recording ---------- */
 
