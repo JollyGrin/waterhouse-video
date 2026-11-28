@@ -15,6 +15,11 @@ const PRIVATE = [
   /\.srt$/i,
   /\.part$/i,
   /\.work\//i,
+  /(^|\/)job\.json$/i, // a share bundle's manifest (#60)
+  /\.shared-input\.json$/i,
+  /(^|\/)share\.local\.json$/i,
+  /(^|\/)rebuild\//i, // a share bundle's rebuilt cut and renders
+  /(^|\/)media\/(inserts|intro|public)\//i, // a share bundle's copied clips, intro, private media
 ];
 
 // A real share link: a new-style link with rlkey= and its long random key, an
@@ -48,7 +53,13 @@ describe("no private batch material in git", () => {
         "oscar.edited.srt",
         "oscar.part",
         "longform/oscar.work/transcript.json",
+        "shares/guest-best-30/job.json",
+        "rebuild/oscar.shared-input.json",
+        "share.local.json",
+        "shares/guest-best-30/rebuild/guest.clean.mp4",
+        "shares/guest-best-30/media/inserts/1-broll.mp4",
         "package.json",
+        "scripts/share/job.ts",
         "longform/src/sesh_edit/batch.py",
         "longform/tests/test_batch.py",
         "src/ident/ids.ts",
@@ -62,6 +73,11 @@ describe("no private batch material in git", () => {
       "oscar.edited.srt",
       "oscar.part",
       "longform/oscar.work/transcript.json",
+      "shares/guest-best-30/job.json",
+      "rebuild/oscar.shared-input.json",
+      "share.local.json",
+      "shares/guest-best-30/rebuild/guest.clean.mp4",
+      "shares/guest-best-30/media/inserts/1-broll.mp4",
     ]);
   });
 

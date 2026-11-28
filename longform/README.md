@@ -206,12 +206,7 @@ decisions file; for the intro, `--intro <file>` or `--no-intro` also works.
 uv run sesh-edit <recording>.mp4 --from-decisions <name>.decisions.json --no-intro -o <scratch>/<name>.edited.mp4
 ```
 
-**A reel a teammate made** ("render the reel Denzo made") comes as a folder outside the
-repo with the `.reel.json`, the episode's `.decisions.json` and a `README.txt`, with the
-reel's `episode.clean` pointing at `rebuild/<name>.clean.mp4`. The recording is not in it;
-whoever renders has it already. Rebuild the clean cut into `<folder>/rebuild/` as above,
-then from the repo root `bun run reel <folder>/<slug>.reel.json` (use the folder's absolute
-path, so it means the same thing from `longform/` and from the root).
+**A reel or an edit a teammate made** comes as a share bundle: see the next section.
 
 **Steps** (from the repo root; keep everything for a real interview outside the repo, e.g.
 `C:\Users\<you>\Videos\sesh-out\reel\`):
@@ -241,6 +236,90 @@ the opposite of the master's gain, so it ends up at its designed level. Then the
 −14 LUFS and a 192 kHz true-peak limiter; the encoded file is measured and must land at
 −14 ± 0.5 LUFS and ≤ −1 dBTP. Remotion's file is 42.7 ms late on sound (AAC priming); that is
 trimmed before mastering (checked by cross-correlation: within 2 ms after).
+
+## Sharing a reel or an edit
+
+Two people have the same raw recording; one makes or changes a reel or an edit and the
+other renders **exactly the same thing** from their own copy. Everything except the raw
+recording travels in a **share bundle**, a plain folder (in the shared Dropbox folder, or
+sent as a Dropbox link). Three commands, from the repo root (`scripts/share/`, #60):
+
+```sh
+bun run share <name>.reel.json [--link <Dropbox link to the raw recording>]   # or <name>.decisions.json for an edit
+bun run preflight <bundle> [--recording <file>]
+bun run rerender <bundle> --recording <file> [--reuse-clean] [--cut-only]
+```
+
+**share** refuses while the repo has unsaved changes or a commit that isn't pushed (the
+bundle pins the exact commit, so the other side must be able to get it). It writes
+`<bundles>/<slug>/` (a reel) or `<bundles>/<name>/` (an edit), where `<bundles>` is `--to`
+or `"bundles"` in `share.local.json` at the repo root (never a folder inside the repo).
+That file is per computer and gitignored:
+
+```json
+{ "bundles": "C:\\Users\\<you>\\Dropbox\\Waterhouse\\shares", "recordings": ["C:\\Users\\<you>\\Videos\\sesh-in"] }
+```
+
+What's in a bundle (it names the guest, quotes the interview and may hold a link:
+**private, never in git**; `.gitignore` and `scripts/no-tracked-private.test.ts` catch
+`job.json`):
+
+- `job.json`: the repo commit, the tool versions (ffmpeg, bun, uv), the raw recording
+  pinned by name, size, duration, fps, frame size and a fast fingerprint (sha256 of the
+  size and the first and last 16 MiB), its Dropbox link if given, and every file below
+  with its sha256. If the sharer's own render is next to the definition (`<slug>.reel.mp4`,
+  or `<name>.edited.mp4` for an edit), its sha256 and loudness, for comparison.
+- the reel's clean cut, pinned by frame size and how it was made: sesh-edit's own
+  (`none`) or an upscale (`lanczos` / `x4plus`, from the file name, e.g.
+  `<name>.clean.x4plus1080p.mp4`, or its `.upscale-work` folder). The crops are in its
+  pixels, so a rerender rebuilds the same one. share refuses an upscale it can't name:
+  rename it;
+- `<slug>.reel.json` with `episode.clean` pointing at `rebuild/<name>.clean.mp4` (or
+  `rebuild/<name>.clean.<method><height>p.mp4` for an upscale);
+- `<name>.decisions.json`, with inserted clips (and an edit's intro, with its `.json` /
+  `.flac` sidecars) copied into `media/` and pointed at there;
+- any private media (`scripts/private-media.ts`) the reel's code uses and this computer
+  has, under `media/public/` (the reel's own cut, `public/reel/`, is made again instead);
+- `README.txt`: the steps, for whoever receives it.
+
+**Changing a received share and sending it back:** edit the bundle's own `.reel.json` and
+run `bun run share <bundle>/<slug>.reel.json --replace` (the bundle can stay where it is:
+`--to` its parent folder, or `bundles` already points there). Its clips and intro are
+found inside the bundle, and the recording through its `job.json` (or `--recording`).
+Everything is built in a folder next to it first; only then are the files the old share
+listed replaced. Anything else in the folder (your copy of the recording, `rebuild/`)
+stays.
+
+**preflight** prints one line per check and ends with `REPRODUCIBLE` or `NOT REPRODUCIBLE`
+and the list of what's missing or different (exit 1):
+
+- the pinned commit is on this computer and the code matches it (docs, tests, `.github/`,
+  `share.ts` and `preflight.ts` don't count; `job.ts` and `rerender.ts` do, they decide
+  how the rebuild runs). If not: render from that commit in a scratch worktree,
+  `git worktree add ../share-<sha> <sha>`, then `bun install` and `cd longform && uv sync`
+  there;
+- the recording: found (`--recording`, else by name in the bundle, `"recordings"` in
+  `share.local.json`, `~/Movies/waterhouse/in`, `Videos/sesh-in`, `Downloads`) and the
+  same file. A different file with the same name fails as `WRONG RECORDING`;
+- every bundle file's sha256, and that a private file isn't already different in your
+  `public/`;
+- the clean cut: shown with the upscale the rerender will redo; an `x4plus` one warns
+  (not bit-identical across graphics cards, and hours: GPU box);
+- node packages (a reel): the installed Remotion and fonts match `package.json`, else
+  `bun install --frozen-lockfile`;
+- tool versions: a warning only.
+
+**rerender** (a reel: `bun install --frozen-lockfile` first) runs preflight and stops
+unless it passes, then rebuilds the clean cut into `<bundle>/rebuild/` with
+`sesh-edit <recording> --from-decisions` (a reel: `--no-intro`; an edit: the edited video,
+intro and captions, is the result), redoes the upscale the reel was cut from
+(`sesh-upscale --method <m> --height <h>`), stops if the clean cut's size isn't the
+pinned one, and renders the reel into `rebuild/<slug>.reel.mp4`. `--reuse-clean` skips
+the rebuild only when `rebuild/rebuild.json` says it was made from the same decisions,
+recording and clean cut; `--cut-only` stops before Remotion renders the reel. "Exact" means the same inputs and the
+same code: different ffmpeg builds can still give different bytes, so the result's sha256
+(and a reel's loudness) goes to `rebuild/result.json` and is compared with the sharer's,
+for information only. Like any full render, run it on the GPU box.
 
 ## Machines & getting videos in (Dropbox → GPU box)
 
