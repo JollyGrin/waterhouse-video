@@ -117,6 +117,10 @@ export async function buildBundle(opts: ShareOptions): Promise<{ dir: string; jo
   /** A path in the decisions: absolute, or relative to the decisions file (a received bundle's media/...). */
   const fromDecisions = (p: string) => (isAbsolute(p) ? p : resolve(here, p));
 
+  // A received bundle is itself the share (and may sit in the shared folder): no local bundle inside it.
+  if (opts.local && existsSync(join(here, "job.json")))
+    throw new Error(`${here} is a share bundle already: to share changes, bun run share <its reel or decisions .json> --to <its folder> (or --publish)`);
+
   /* ---------- the recording ---------- */
 
   const recording = resolve(opts.recording ?? findShared(here, decisions, root));

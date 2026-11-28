@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { findBin } from "../lib/ff";
 import {
+  checkOutsideRepo,
   cleanCheck,
   cleanFileName,
   cleanMethod,
@@ -552,6 +553,21 @@ describe("the auto-bundle after a render", () => {
     const line = await autoBundle(reel, { checkCode: false, probe });
     expect(line).toStartWith("Not bundled for sharing: the edit inserts a clip that isn't on this computer");
     expect(line).not.toContain("\n");
+  });
+
+  it("doesn't nest a local bundle inside a received one", async () => {
+    const shared = await buildBundle({ input: join(TMP, "auto", "guest.reel.json"), to: join(TMP, "auto-received"), checkCode: false, probe });
+    writeFileSync(join(shared.dir, "guest.mp4"), bytes(5000, 1));
+    mkdirSync(join(shared.dir, "rebuild"), { recursive: true });
+    writeFileSync(join(shared.dir, "rebuild", "guest.clean.mp4"), bytes(100, 4));
+    const line = await autoBundle(join(shared.dir, "reels", "guest-best-30.reel.json"), { checkCode: false, probe });
+    expect(line).toContain("is a share bundle already");
+    expect(existsSync(join(shared.dir, "guest.share"))).toBe(false);
+  });
+
+  it("allows a local bundle inside the repo only where git ignores it", () => {
+    expect(checkOutsideRepo(join(ROOT, "out", "x", "guest.share"))).toBe(join(ROOT, "out", "x", "guest.share"));
+    expect(() => checkOutsideRepo(join(ROOT, "docs", "guest"))).toThrow("inside the repo");
   });
 });
 
