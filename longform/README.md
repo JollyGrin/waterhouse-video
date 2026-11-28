@@ -194,6 +194,25 @@ That re-renders the same cut from the original recording (the decisions' `input`
 a normal render (a 27-minute 1080p25 interview: about 30 minutes on the GPU box). make-reel
 checks that the clean cut's length matches the decisions.
 
+**On another computer**, where the recording lives somewhere else: pass the recording
+instead of the decisions file as the first argument. It replaces the path stored in the
+decisions, after a check that its length, frame rate and frame size match. Clips added with
+`--insert-clip` (and a custom `--intro`) are stored by their full path on the computer that
+made the edit: sesh-edit stops and names any that aren't there. Put each one on this
+computer and change its `"path"` under `"inserts"` (or `"file"` under `"intro"`) in the
+decisions file; for the intro, `--intro <file>` or `--no-intro` also works.
+
+```sh
+uv run sesh-edit <recording>.mp4 --from-decisions <name>.decisions.json --no-intro -o <scratch>/<name>.edited.mp4
+```
+
+**A reel a teammate made** ("render the reel Denzo made") comes as a folder outside the
+repo with the `.reel.json`, the episode's `.decisions.json` and a `README.txt`, with the
+reel's `episode.clean` pointing at `rebuild/<name>.clean.mp4`. The recording is not in it;
+whoever renders has it already. Rebuild the clean cut into `<folder>/rebuild/` as above,
+then from the repo root `bun run reel <folder>/<slug>.reel.json` (use the folder's absolute
+path, so it means the same thing from `longform/` and from the root).
+
 **Steps** (from the repo root; keep everything for a real interview outside the repo, e.g.
 `C:\Users\<you>\Videos\sesh-out\reel\`):
 
@@ -209,7 +228,9 @@ checks that the clean cut's length matches the decisions.
    paths are relative to the file): `episode.clean`, `episode.decisions`, `segments`
    (`start`, `end`, optional `shot`), `shots`, `artist`, `cta`, optional `wordFixes`
    (`{t, w}` in clean time for a misheard word, `{t, drop: true}` to take a stutter out of
-   the captions; the sound is never changed).
+   the captions; the sound is never changed), optional `"banner"`: every reel gets a "Full
+   interview on YouTube" banner with YouTube's play button over the whole clip, under the
+   logo (the end bumper still plays after it); `"banner": "none"` leaves it off.
 4. `bun run reel <name>.reel.json` → `<slug>.reel.mp4` next to it, about 2 minutes on the GPU
    box. `--reuse-cut` re-renders without cutting again; `--cut-only` stops before the
    render and prints a props file for Studio (`bun run dev -- --props=<file>`).

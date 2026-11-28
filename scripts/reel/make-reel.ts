@@ -36,7 +36,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { findBin } from "../lib/ff";
 import { CENTRE, centreCrop, cropProblems, type Crop, type SourceSize } from "../../src/reel/crop";
 import { FPS } from "../../src/reel/theme";
-import { reelTiming, type ReelIntro, type ReelOutro, type SessionReelProps } from "../../src/reel/SessionReel";
+import { reelBanner, reelTiming, type ReelBanner, type ReelIntro, type ReelOutro, type SessionReelProps } from "../../src/reel/SessionReel";
 import { FUSE_DRUMS_AUDIO } from "../../src/ident/Fuse";
 // (the YouTube bumper's sound is placed by SessionReel; only its gain is worked out here)
 import { seshCaptionWords, TimeMap, type CaptionWord, type SeshDecisions } from "./sesh";
@@ -74,6 +74,8 @@ export type ReelDef = {
   intro?: ReelIntro;
   /** Default "youtube" (the YouTube end bumper); "card" is the old end card. */
   outro?: ReelOutro;
+  /** "youtube" (default): a "full interview on YouTube" banner over the whole clip. "none" turns it off. */
+  banner?: ReelBanner;
   /** Named crop windows into the source, in source pixels. "centre" is always there. */
   shots?: Record<string, Crop>;
   /** Lowest source row a crop may reach (a burned-in ticker below, say). */
@@ -89,6 +91,13 @@ export const TARGET_LUFS = -14;
 export const TARGET_TP = -1;
 
 /** Snap a time onto the reel's frame grid (see stage 1). */
+/** The definition's banner, defaulted; a typo like "yt" fails loudly instead of rendering no banner. */
+export function resolveBanner(banner: unknown): ReelBanner {
+  if (banner === undefined) return reelBanner(undefined);
+  if (banner === "youtube" || banner === "none") return banner;
+  throw new Error(`"banner": ${JSON.stringify(banner)} isn't a banner: use "youtube" (the default) or "none"`);
+}
+
 export const snap = (t: number) => Math.round(t * FPS) / FPS;
 
 /** The crop for every span, by shot name; unknown names are an error. */
@@ -215,6 +224,7 @@ async function main() {
   const def: ReelDef = await Bun.file(defPath).json();
   const intro: ReelIntro = def.intro ?? "fuse-drums";
   const outro: ReelOutro = def.outro ?? "youtube";
+  const banner = resolveBanner(def.banner);
 
   /* ---------- the source, and its words in source time ---------- */
 
@@ -349,6 +359,7 @@ async function main() {
     introGainDb: gain,
     outro,
     outroGainDb: outroGain,
+    banner,
     artist: def.artist,
     episodeLabel: def.episodeLabel,
     cta: def.cta,

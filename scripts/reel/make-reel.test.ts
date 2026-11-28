@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { introGainDb, outroGainDb, rebaseCaptions, resolveCrops, snap } from "./make-reel";
+import { introGainDb, outroGainDb, rebaseCaptions, resolveBanner, resolveCrops, snap } from "./make-reel";
 import { centreCrop, cropProblems } from "../../src/reel/crop";
-import { reelTiming, INTRO_OPEN_FRAME } from "../../src/reel/SessionReel";
+import { reelBanner, reelTiming, INTRO_OPEN_FRAME } from "../../src/reel/SessionReel";
 import { YOUTUBE_OUTRO_FRAMES } from "../../src/reel/outro/YouTubeOutro";
 import example from "../../src/reel/data/example.reel.json";
 
@@ -48,6 +48,16 @@ describe("make-reel (#55)", () => {
     expect(() => resolveCrops({ segments: [], shots: { wide: { x: 0, y: 0, width: 1000, height: 1000 } } }, src)).toThrow(/9:16/);
     expect(cropProblems("low", { x: 0, y: 95, width: 534, height: 950 }, src, 1000)).toHaveLength(1);
     expect(cropProblems("off", { x: 1500, y: 0, width: 608, height: 1080 }, src)).toHaveLength(1);
+  });
+
+  it("puts the YouTube banner on every reel unless the definition says none", () => {
+    expect(reelBanner(undefined)).toBe("youtube");
+    expect(reelBanner("youtube")).toBe("youtube");
+    expect(reelBanner("none")).toBe("none");
+    expect(resolveBanner(undefined)).toBe("youtube");
+    expect(resolveBanner("none")).toBe("none");
+    expect(() => resolveBanner("yt")).toThrow(/"youtube".*"none"/);
+    expect(() => resolveBanner(true)).toThrow(/banner/);
   });
 
   it("matches the intro to the clip, capped by its true peak", () => {

@@ -140,6 +140,7 @@ graphics in sesh-edit.
 | Idents / Sessions intro (**Fuse is the Sessions intro**, sesh-edit uses its Fuse-Drums cut; FuseLines-Ink/-Wave/-Draft are alternatives) | Remotion `IdentFuse` / `IdentFuse-16x9` etc. in `src/ident/` (Studio: Idents › Sessions-intro) | `bun run render:ident Fuse-16x9` (one comp), `--intro` (Fuse + FuseLines, both cuts), `--only preview,prores,webm`. `render:ident <Id>` for any of the other 24 idents (list: README "Idents"), `--all` for every one. Full renders on the GPU box. To rebuild sesh-edit's intro (Fuse-Drums): `bun run render:intro` (needs ffmpeg on PATH) | `out/ident/Ident<Id>-preview.mp4`, `.mov` (ProRes 4444 alpha, editing), `.webm` (VP9 alpha, OBS) |
 | Stinger for OBS (transition into a scene) | Remotion `SessionBumper` | List the 8 ideas (door, corner, lamp, paper, neon, vhs, fader, flap) and offer contact sheets: `bun run render:bumper --idea <idea> --strip` also writes `out/Bumper-<idea>-frames.png` (every 10th frame). Then `bun run render:bumper --idea <idea>`. OBS settings and transition points: README "SessionBumper" | `out/Bumper-<idea>.webm` (alpha) |
 | Instagram reel (9:16) from an interview ("the best 30 seconds of the <guest> interview") | Remotion `SessionReel` | Write `<name>.reel.json` **next to the episode's outputs** (never in the repo), then `bun run reel <that file>`. Needs the episode's clean cut + decisions; see [Reels](#reels-from-an-edited-interview) | `<slug>.reel.mp4` next to the definition |
+| Re-render a reel a teammate made ("render the reel Denzo made") | Remotion `SessionReel` | The sender puts a folder outside the repo (Dropbox) with `<slug>.reel.json` (its `episode.clean` set to `rebuild/<name>.clean.mp4`), the episode's `.decisions.json` and a `README.txt` they write with these steps; you already have the raw recording. Use the folder's **absolute** path (`<folder>` below): `cd longform; uv run sesh-edit <recording> --from-decisions <folder>/<name>.decisions.json --no-intro -o <folder>/rebuild/<name>.edited.mp4` rebuilds the clean cut, then `cd ..; bun run reel <folder>/<slug>.reel.json` (from the repo root). `longform/README.md`, "A reel from an episode" | `<folder>/<slug>.reel.mp4` |
 | The reel's end bumper ("full interview on YouTube") | Remotion `ReelOutro-YouTube` | `bunx remotion render ReelOutro-YouTube out/reel-outro.mp4 --props '{"artist":"Name"}'`; `src/reel/outro/YouTubeOutro.tsx` exports `YouTubeOutro` and `YOUTUBE_OUTRO_FRAMES` for the reel pipeline. README "ReelOutro-YouTube" | `out/reel-outro.mp4` |
 | Edit a recorded Sessions interview (cut fillers, silences, pre-take chatter, A/V sync, mic mix, captions, intro) | sesh-edit | `cd longform && uv run sesh-edit <in> -o <out>.edited.mp4 --review` first, show the plan, then the same without `--review` | `<out>.edited.mp4`, `.srt`, `.decisions.json`, `.clean.mp4` |
 | Fix captions or a misheard word | sesh-edit | `cd longform && uv run sesh-edit <in> -o <out>.edited.mp4 --replace Waterhose=Waterhouse` (cached, ~40 s). Or edit the decisions file and use `--from-decisions` | overwrites the edit |
@@ -250,7 +251,10 @@ So everyone's work looks like it comes from the same place:
   Mono One (display) and JetBrains Mono (mono), the colour tokens `C.*`
   (paper, ink, grays, the yellow `#FFD400` accent) and the mark's paths.
   Import them; don't paste new hex codes or load other fonts without asking
-  the user, and mention it in the PR.
+  the user, and mention it in the PR. **One exception:** YouTube red
+  `#FF0000` (`YOUTUBE_RED` in `brand.ts`) is approved (Dean, 2026-11-28)
+  for the play button in the reel's YouTube banner
+  (`src/reel/YouTubeBanner.tsx`), and only there.
 - **Tone: adult, gritty, restrained.** Mostly black, paper and greys, with
   at most one accent colour used sparingly. Grain and texture, weighty
   motion and hard cuts rather than bouncy springs. The grit comes from
@@ -399,7 +403,7 @@ episode's intro is now sesh-edit's job.
 `SessionReel` (`src/reel/`) turns a finished sesh-edit interview into a 20–30 s
 Instagram reel: Fuse-Drums 9:16 in front (the clip opens under its rings at frame
 118, like the 16:9 intro), the clip cropped to 9:16 and cut between the speakers,
-karaoke captions, the YouTube end bumper (`ReelOutro-YouTube`, "WITH <ARTIST>" from the definition's `artist`), mastered to −14 LUFS / −1 dBTP, h264 + aac,
+karaoke captions, a "Full interview on YouTube" banner over the clip (on by default; `"banner": "none"` in the definition turns it off), the YouTube end bumper (`ReelOutro-YouTube`, "WITH <ARTIST>" from the definition's `artist`), mastered to −14 LUFS / −1 dBTP, h264 + aac,
 `+faststart`. `scripts/reel/make-reel.ts` builds it from a reel definition. The
 full walk-through is `longform/README.md`, "A reel from an episode". In short:
 
