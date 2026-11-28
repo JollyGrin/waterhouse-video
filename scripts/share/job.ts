@@ -23,7 +23,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { findBin } from "../lib/ff";
 import { isPrivate, PRIVATE_MEDIA } from "../private-media";
 import { findMediaRefs, readSources, ROOT } from "../template-media";
@@ -69,9 +69,18 @@ export type Job = {
   tools: Tools;
   recording: PinnedRecording;
   files: PinnedFile[];
+  /** A reel share: the clean cut the reel was cut from (its `shots` are in its pixels). */
+  clean?: CleanSpec;
   /** The sharer's own render, for comparison only (bit-identical output isn't promised). */
   reference?: Output;
 };
+
+/**
+ * The clean cut a reel reads: sesh-edit's own (`none`, the recording's frame size) or an
+ * upscale of it (`sesh-upscale --method <method> --height <height>`), which the rerender
+ * redoes after rebuilding the clean cut.
+ */
+export type CleanSpec = { width: number; height: number; method: "none" | "lanczos" | "x4plus" };
 
 export type Tools = { ffmpeg: string | null; bun: string | null; uv: string | null };
 export type Output = { file: string; bytes: number; sha256: string; loudness?: { i: number; tp: number } };
@@ -91,21 +100,32 @@ export function sha256File(file: string): string {
   return hash.digest("hex");
 }
 
+/**
+ * Read `len` bytes at `from`, or up to the end of the file. One readSync can return fewer
+ * bytes than asked (network drives, Dropbox Smart Sync), so it loops.
+ */
+export function readFully(fd: number, len: number, from: number, read: typeof readSync = readSync): Buffer {
+  const buf = Buffer.alloc(len);
+  let got = 0;
+  while (got < len) {
+    const n = read(fd, buf, got, len - got, from + got);
+    if (n <= 0) break;
+    got += n;
+  }
+  return buf.subarray(0, got);
+}
+
 /** sha256 of the size and both ends: seconds on a 10 GB recording, and a different take never matches. */
-export function fingerprint(file: string, chunk = FINGERPRINT_CHUNK): string {
+export function fingerprint(file: string, chunk = FINGERPRINT_CHUNK, read: typeof readSync = readSync): string {
   const size = statSync(file).size;
   const hash = createHash("sha256").update(`${size}\n`);
   const fd = openSync(file, "r");
   try {
-    const read = (from: number, len: number) => {
-      const buf = Buffer.alloc(len);
-      const n = readSync(fd, buf, 0, len, from);
-      hash.update(buf.subarray(0, n));
-    };
-    if (size <= 2 * chunk) read(0, size);
+    const take = (from: number, len: number) => hash.update(readFully(fd, len, from, read));
+    if (size <= 2 * chunk) take(0, size);
     else {
-      read(0, chunk);
-      read(size - chunk, chunk);
+      take(0, chunk);
+      take(size - chunk, chunk);
     }
   } finally {
     closeSync(fd);
@@ -302,18 +322,39 @@ export function jobProblems(job: Partial<Job>): string[] {
   if (job.version !== JOB_VERSION) out.push(`version ${job.version}, this repo reads version ${JOB_VERSION} (get the latest work)`);
   if (job.kind !== "reel" && job.kind !== "edit") out.push(`kind ${JSON.stringify(job.kind)}`);
   if (!job.name || !job.episode) out.push("no name or episode");
+  else if (!SAFE_NAME.test(job.name) || !SAFE_NAME.test(job.episode)) out.push(`name ${JSON.stringify(job.name)} / episode ${JSON.stringify(job.episode)}: letters, digits, - and _ only`);
   if (!job.repo?.commit || !/^[0-9a-f]{40}$/.test(job.repo.commit)) out.push("no repo commit");
   const r = job.recording;
   if (!r || !r.name || !r.fingerprint || !(r.bytes > 0) || !(r.duration > 0) || !(r.fps > 0) || !(r.width > 0) || !(r.height > 0))
     out.push("the recording isn't fully pinned (name, bytes, fingerprint, duration, fps, frame size)");
   if (!Array.isArray(job.files)) out.push("no file list");
-  else
+  else {
     for (const f of job.files)
-      if (!f.path || isAbsolute(f.path) || f.path.split("/").includes("..") || !/^[0-9a-f]{64}$/.test(f.sha256 ?? ""))
-        out.push(`file entry ${JSON.stringify(f.path)}`);
-      else if (f.publicPath !== undefined && (f.publicPath.split("/").includes("..") || isAbsolute(f.publicPath) || !isPrivate(f.publicPath)))
+      if (!safeRelPath(f.path) || !/^[0-9a-f]{64}$/.test(f.sha256 ?? "")) out.push(`file entry ${JSON.stringify(f.path)}`);
+      else if (f.publicPath !== undefined && (!safeRelPath(f.publicPath) || !isPrivate(f.publicPath)))
         out.push(`file entry ${JSON.stringify(f.path)}: public/${f.publicPath} isn't on the private list`);
+    // the files the rerender reads by name
+    const need: [string, FileRole][] = [[`${job.episode}.decisions.json`, "decisions"]];
+    if (job.kind === "reel") need.push([`${job.name}.reel.json`, "reel"]);
+    for (const [path, role] of need)
+      if (!job.files.some((f) => f.path === path && f.role === role)) out.push(`no ${role} entry ${path}`);
+  }
+  if (job.kind === "reel") {
+    const c = job.clean;
+    if (!c || !(c.width > 0) || !(c.height > 0) || !["none", "lanczos", "x4plus"].includes(c.method)) out.push("the reel's clean cut isn't pinned");
+  }
   return out;
+}
+
+/** A share's folder name, slug and episode name. */
+export const SAFE_NAME = /^(?!\.)[\w.-]+$/;
+
+/** A relative path with forward slashes only: no backslash, drive letter, absolute path or "..". */
+export function safeRelPath(p: unknown): p is string {
+  return (
+    typeof p === "string" && p.length > 0 && !p.includes("\\") && !p.includes(":") && !p.startsWith("/") &&
+    !isAbsolute(p) && !p.split("/").some((part) => part === ".." || part === "")
+  );
 }
 
 /** A bundle-relative path on this computer. */
@@ -365,12 +406,23 @@ export function preflight(bundle: string, job: Job, opts: PreflightOptions = {})
     else checks.push({ label: `${f.role} ${f.path}`, ok: true });
   }
 
+  if (job.clean) checks.push(cleanCheck(job.clean));
+  if (job.kind === "reel") checks.push(packagesCheck(root));
   checks.push(toolsCheck(job.tools, opts.tools ?? toolVersions()));
   return { checks, recording };
 }
 
 /** What a render can't depend on, so it may differ from the pinned commit. */
-export const CODE_EXCLUDES = ["*.md", "**/*.test.ts", "**/*.test.tsx", "scripts/share/**", "longform/tests/**", ".github/**"];
+export const CODE_EXCLUDES = [
+  "*.md",
+  "**/*.test.ts",
+  "**/*.test.tsx",
+  "longform/tests/**",
+  ".github/**",
+  // job.ts and rerender.ts decide how the render runs, so they stay pinned
+  "scripts/share/share.ts",
+  "scripts/share/preflight.ts",
+];
 
 /** Is the pinned commit here, and does this checkout's code match it? */
 export function codeCheck(commit: string, root = ROOT): Check {
@@ -395,6 +447,77 @@ export function codeCheck(commit: string, root = ROOT): Check {
       `render from that commit instead, e.g. git worktree add ../share-${commit.slice(0, 7)} ${commit}`,
     ],
   };
+}
+
+/* ---------- the clean cut, and the rebuild ---------- */
+
+/** The rebuilt clean cut's file name the shared reel definition reads. */
+export function cleanFileName(episode: string, clean: CleanSpec): string {
+  return clean.method === "none" ? `${episode}.clean.mp4` : `${episode}.clean.${clean.method}${clean.height}p.mp4`;
+}
+
+/**
+ * How the clean cut at `file` was made: the recording's own size is sesh-edit's cut;
+ * anything else is an upscale, named by its file name (".x4plus1080p") or by the
+ * sesh-upscale work folder next to it. null = can't tell.
+ */
+export function cleanMethod(file: string, size: { width: number; height: number }, recording: { width: number; height: number }): CleanSpec["method"] | null {
+  if (size.width === recording.width && size.height === recording.height) return "none";
+  const name = basename(file).toLowerCase();
+  if (name.includes("x4plus")) return "x4plus";
+  if (name.includes("lanczos")) return "lanczos";
+  const status = join(dirname(file), basename(file).replace(/\.mp4$/i, "") + ".upscale-work", "status.json");
+  try {
+    const method = JSON.parse(readFileSync(status, "utf8")).settings?.method;
+    if (method === "x4plus" || method === "lanczos") return method;
+  } catch {
+    // no work folder: unknown
+  }
+  return null;
+}
+
+export function cleanCheck(clean: CleanSpec): Check {
+  if (clean.method === "none") return { label: `clean cut ${clean.width}x${clean.height} (sesh-edit's own)`, ok: true };
+  const label = `clean cut ${clean.width}x${clean.height}: rerender upscales it with sesh-upscale --method ${clean.method}`;
+  return clean.method === "x4plus"
+    ? { label, ok: false, warn: true, detail: ["an x4plus upscale isn't bit-identical across graphics cards, and takes hours: GPU box"] }
+    : { label, ok: true };
+}
+
+/** Do the installed node packages match package.json's pinned versions (Remotion, fonts)? */
+export function packagesCheck(root = ROOT): Check {
+  const label = "node packages";
+  let deps: Record<string, string>;
+  try {
+    deps = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).dependencies ?? {};
+  } catch {
+    return { label, ok: false, detail: ["no package.json"] };
+  }
+  const off: string[] = [];
+  for (const [name, want] of Object.entries(deps)) {
+    if (!/^\d+\.\d+\.\d+$/.test(want)) continue; // only exact pins can be compared
+    let have: string | null = null;
+    try {
+      have = JSON.parse(readFileSync(join(root, "node_modules", name, "package.json"), "utf8")).version;
+    } catch {
+      have = null;
+    }
+    if (have !== want) off.push(`${name} ${have ?? "missing"} (want ${want})`);
+  }
+  return off.length ? { label, ok: false, detail: [...off.slice(0, 6), "run bun install --frozen-lockfile"] } : { label, ok: true };
+}
+
+/** What the clean cut in rebuild/ was made from; --reuse-clean reuses it only when this matches. */
+export type RebuildStamp = { decisions: string; recording: string; clean: CleanSpec | null; intro: boolean };
+
+export const STAMP_FILE = "rebuild.json";
+
+export function stampMatches(rebuild: string, want: RebuildStamp): boolean {
+  try {
+    return JSON.stringify(JSON.parse(readFileSync(join(rebuild, STAMP_FILE), "utf8"))) === JSON.stringify(want);
+  } catch {
+    return false;
+  }
 }
 
 export function toolsCheck(pinned: Tools, here: Tools): Check {
@@ -423,12 +546,16 @@ export function formatReport(checks: Check[]): { text: string; reproducible: boo
 }
 
 /** The bundle's folder for a share named `name`: --to, else share.local.json's `bundles`. */
-export function bundleDir(name: string, to: string | undefined, config: LocalConfig): string {
+export function bundleDir(name: string, to: string | undefined, config: LocalConfig, root = ROOT): string {
   const base = to ?? config.bundles;
   if (!base)
     throw new Error(
       `where should the bundle go? Pass --to <folder>, or set "bundles" in ${CONFIG_FILE} at the repo root ` +
         `(e.g. {"bundles": "<your Dropbox>/Waterhouse/shares"}).`,
     );
-  return resolve(base, name);
+  const dir = resolve(base, name);
+  const rel = relative(resolve(root), dir);
+  if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel)))
+    throw new Error(`${dir} is inside the repo, which is public: put share bundles outside it (e.g. your Dropbox)`);
+  return dir;
 }

@@ -5,7 +5,10 @@
  *
  * 1. preflight (stops unless REPRODUCIBLE);
  * 2. rebuilds the clean cut into <bundle>/rebuild/ with sesh-edit --from-decisions
- *    (a reel share: --no-intro; an edit share: the edited video with its intro is the result);
+ *    (a reel share: --no-intro; an edit share: the edited video with its intro is the result),
+ *    then, when the reel was cut from an upscale, redoes it (sesh-upscale, same method and
+ *    height) and checks the size matches; --reuse-clean skips this only when rebuild/rebuild.json
+ *    says it was made from the same decisions, recording and clean cut;
  * 3. a reel share: renders the reel into <bundle>/rebuild/<slug>.reel.mp4 (--cut-only stops
  *    before Remotion renders it and prints a props file to preview in Studio).
  *
@@ -15,18 +18,33 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { ROOT } from "../template-media";
 import { measureLoudness } from "../reel/make-reel";
-import { inBundle, sha256File, type Job, type Output, type SeshDecisionsLite } from "./job";
+import {
+  cleanFileName,
+  inBundle,
+  probeRecording,
+  readJob,
+  safeRelPath,
+  sha256File,
+  stampMatches,
+  STAMP_FILE,
+  type CleanSpec,
+  type Job,
+  type Output,
+  type RebuildStamp,
+  type SeshDecisionsLite,
+} from "./job";
 import { parseBundleArgs, runPreflight } from "./preflight";
 
 /** The shared decisions with the bundle's clips and intro as full paths on this computer (sesh-edit wants those). */
 export function localDecisions(bundle: string, decisions: SeshDecisionsLite): SeshDecisionsLite {
   const out: SeshDecisionsLite = JSON.parse(JSON.stringify(decisions));
-  for (const ins of out.inserts ?? []) if (ins.kind === "clip" && ins.path?.startsWith("media/")) ins.path = inBundle(bundle, ins.path);
-  if (out.intro?.file?.startsWith("media/")) out.intro.file = inBundle(bundle, out.intro.file);
+  const mine = (p?: string): p is string => !!p && p.startsWith("media/") && safeRelPath(p);
+  for (const ins of out.inserts ?? []) if (ins.kind === "clip" && mine(ins.path)) ins.path = inBundle(bundle, ins.path);
+  if (out.intro && mine(out.intro.file)) out.intro.file = inBundle(bundle, out.intro.file);
   return out;
 }
 
@@ -40,10 +58,14 @@ async function main() {
   const args = parseBundleArgs(process.argv.slice(2), "bun run rerender <bundle> --recording <file> [--reuse-clean] [--cut-only]");
   for (const f of args.flags) if (f !== "--reuse-clean" && f !== "--cut-only") throw new Error(`unknown option ${f}`);
   if (!args.recording) throw new Error("pass --recording <your copy of the raw recording>");
-  const { job, recording, reproducible } = runPreflight(args.bundle, args.recording);
+  const bundle = args.bundle;
+
+  // The reel renders with this checkout's node packages: make them exactly what bun.lock says first.
+  if (readJob(bundle).kind === "reel") run(["bun", "install", "--frozen-lockfile"], ROOT);
+
+  const { job, recording, reproducible } = runPreflight(bundle, args.recording);
   if (!reproducible || !recording) throw new Error("\nNot rendering: fix what preflight lists first.");
 
-  const bundle = args.bundle;
   const rebuild = join(bundle, "rebuild");
   mkdirSync(rebuild, { recursive: true });
 
@@ -54,18 +76,35 @@ async function main() {
       copyFileSync(inBundle(bundle, f.path), join(ROOT, "public", f.publicPath));
     }
 
-  const clean = join(rebuild, `${job.episode}.clean.mp4`);
+  const decisionsFile = `${job.episode}.decisions.json`;
+  const stamp = rebuildStamp(job);
+  const clean = join(rebuild, job.clean ? cleanFileName(job.episode, job.clean) : `${job.episode}.clean.mp4`);
   const edited = join(rebuild, `${job.episode}.edited.mp4`);
-  if (args.flags.has("--reuse-clean") && existsSync(clean) && (job.kind === "reel" || existsSync(edited))) {
-    console.log(`\nReusing ${clean}`);
+  if (args.flags.has("--reuse-clean") && existsSync(job.kind === "reel" ? clean : edited) && stampMatches(rebuild, stamp)) {
+    console.log(`\nReusing ${job.kind === "reel" ? clean : edited} (made from these same decisions and recording)`);
   } else {
-    const decisions = JSON.parse(readFileSync(inBundle(bundle, `${job.episode}.decisions.json`), "utf8"));
+    if (args.flags.has("--reuse-clean")) console.log("\nNot reusing rebuild/: it wasn't made from this share's decisions, recording and clean cut.");
+    rmSync(join(rebuild, STAMP_FILE), { force: true });
+    const decisions = JSON.parse(readFileSync(inBundle(bundle, decisionsFile), "utf8"));
     const local = join(rebuild, `${job.episode}.shared-input.json`);
     writeFileSync(local, JSON.stringify(localDecisions(bundle, decisions), null, 1));
     run(
       ["uv", "run", "sesh-edit", recording, "--from-decisions", local, ...(job.kind === "reel" ? ["--no-intro"] : []), "-o", edited],
       join(ROOT, "longform"),
     );
+    if (job.clean && job.clean.method !== "none") {
+      const own = join(rebuild, `${job.episode}.clean.mp4`);
+      run(
+        ["uv", "run", "sesh-upscale", own, "-o", clean, "--method", job.clean.method, "--height", String(job.clean.height)],
+        join(ROOT, "longform"),
+      );
+    }
+    if (job.clean) {
+      const size = probeRecording(clean);
+      const problem = cleanSizeProblem(job.clean, size);
+      if (problem) throw new Error(problem);
+    }
+    writeFileSync(join(rebuild, STAMP_FILE), JSON.stringify(stamp, null, 1));
   }
 
   let output = edited;
@@ -81,6 +120,20 @@ async function main() {
   writeFileSync(join(rebuild, "result.json"), JSON.stringify({ ...result, reference: job.reference ?? null }, null, 1));
   console.log(`\nDone: ${output}`);
   console.log(compare(job, result));
+}
+
+/** What a rebuild of this share is made from (written next to it, checked by --reuse-clean). */
+export function rebuildStamp(job: Job): RebuildStamp {
+  const decisions = job.files.find((f) => f.role === "decisions" && f.path === `${job.episode}.decisions.json`);
+  return { decisions: decisions?.sha256 ?? "", recording: job.recording.fingerprint, clean: job.clean ?? null, intro: job.kind === "edit" };
+}
+
+/** The reel's crops are in the shared clean cut's pixels: a rebuilt one of another size must not be used. */
+export function cleanSizeProblem(want: CleanSpec, got: { width: number; height: number }): string | null {
+  return want.width === got.width && want.height === got.height
+    ? null
+    : `the rebuilt clean cut is ${got.width}x${got.height}, but the reel was cut from a ${want.width}x${want.height} one ` +
+        `(${want.method === "none" ? "sesh-edit's own" : `a ${want.method} upscale`}): its crops would be wrong. Not rendering.`;
 }
 
 export function compare(job: Pick<Job, "reference">, result: Output): string {

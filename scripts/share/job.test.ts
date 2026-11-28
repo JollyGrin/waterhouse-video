@@ -1,11 +1,19 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { findBin } from "../lib/ff";
 import {
+  cleanCheck,
+  cleanFileName,
+  cleanMethod,
   codeCheck,
+  readFully,
+  safeRelPath,
+  stampMatches,
+  STAMP_FILE,
+  packagesCheck,
   codeRefusal,
   decisionsMismatch,
   fingerprint,
@@ -20,7 +28,8 @@ import {
   type RecordingInfo,
 } from "./job";
 import { buildBundle } from "./share";
-import { compare, localDecisions } from "./rerender";
+import { cleanSizeProblem, compare, localDecisions, rebuildStamp } from "./rerender";
+import { ROOT } from "../template-media";
 
 // Everything here is made up and tiny: no real recordings, no renders (#60).
 
@@ -28,7 +37,8 @@ const TMP = mkdtempSync(join(tmpdir(), "share-test-"));
 afterAll(() => rmSync(TMP, { recursive: true, force: true }));
 
 const INFO: RecordingInfo = { duration: 1500, fps: 25, width: 1280, height: 720 };
-const probe = () => INFO;
+/** Every made-up file is the recording's size, except an upscale. */
+const probe = (file: string): RecordingInfo => (/1080p/.test(file) ? { ...INFO, width: 1920, height: 1080 } : INFO);
 const bytes = (n: number, seed: number) => Buffer.from(Array.from({ length: n }, (_, i) => (i * 31 + seed) % 251));
 
 function sh(cwd: string, ...args: string[]) {
@@ -44,6 +54,7 @@ function episode(dir: string) {
   writeFileSync(rec, bytes(5000, 1));
   const clip = join(dir, "broll.mp4");
   writeFileSync(clip, bytes(300, 2));
+  writeFileSync(join(dir, "guest.clean.mp4"), bytes(100, 4));
   writeFileSync(
     join(dir, "guest.decisions.json"),
     JSON.stringify({
@@ -85,6 +96,16 @@ describe("fingerprint", () => {
     // a small file is hashed whole
     expect(fingerprint(a)).not.toBe(fingerprint(b));
   });
+
+  it("survives short reads (network drives, Dropbox Smart Sync)", () => {
+    const a = join(TMP, "a.bin");
+    const short: typeof readSync = ((fd: number, buf: Buffer, off: number, len: number, pos: number) =>
+      readSync(fd, buf, off, Math.min(len, 7), pos)) as typeof readSync;
+    expect(fingerprint(a, 1000, short)).toBe(fingerprint(a, 1000));
+    const fd = openSync(a, "r");
+    expect(readFully(fd, 50, 9_990, short).length).toBe(10); // stops at the end of the file
+    closeSync(fd);
+  });
 });
 
 describe("share → job.json → preflight", async () => {
@@ -116,6 +137,10 @@ describe("share → job.json → preflight", async () => {
     const local = localDecisions(dir, dec);
     expect(local.inserts![0].path).toBe(join(dir, "media", "inserts", "1-broll.mp4"));
     expect(readFileSync(join(dir, "README.txt"), "utf8")).toContain("guest.mp4");
+  });
+
+  it("refuses a bundle folder inside the repo", async () => {
+    await expect(buildBundle({ input: reel, to: join(ROOT, "out", "shares"), probe, checkCode: false })).rejects.toThrow("inside the repo");
   });
 
   it("refuses to overwrite a bundle unless asked", async () => {
@@ -256,5 +281,135 @@ describe("the result", () => {
     expect(compare({}, out)).toContain("no render of its own");
     expect(compare({ reference: out }, out)).toContain("Byte-for-byte");
     expect(compare({ reference: { ...out, sha256: "b".repeat(64), loudness: { i: -14.1, tp: -1 } } }, out)).toContain("Not byte-identical");
+  });
+});
+
+describe("re-sharing a received bundle", () => {
+  it("Dean shares, Denzo changes it in place and shares it back: still reproducible", async () => {
+    const { rec, reel } = episode(join(TMP, "dean"));
+    const shares = join(TMP, "roundtrip");
+    const { dir } = await buildBundle({ input: reel, to: shares, link: "https://example.com/rec", probe, checkCode: false });
+
+    // Denzo keeps his copy of the raw in the bundle, rerenders (rebuild/), and tweaks a span
+    writeFileSync(join(dir, "guest.mp4"), readFileSync(rec));
+    mkdirSync(join(dir, "rebuild"));
+    writeFileSync(join(dir, "rebuild", "guest.clean.mp4"), bytes(100, 4));
+    const defPath = join(dir, "guest-best-30.reel.json");
+    const def = JSON.parse(readFileSync(defPath, "utf8"));
+    def.segments = [{ start: 2, end: 24 }];
+    writeFileSync(defPath, JSON.stringify(def));
+
+    // no --recording: found through the bundle's own job.json
+    const again = await buildBundle({ input: defPath, to: shares, replace: true, probe, checkCode: false });
+    expect(again.dir).toBe(dir);
+    expect(existsSync(join(dir, "guest.mp4"))).toBe(true); // not ours to delete
+    expect(existsSync(join(dir, "rebuild", "guest.clean.mp4"))).toBe(true);
+    expect(again.job.recording.link).toBe("https://example.com/rec");
+    expect(JSON.parse(readFileSync(defPath, "utf8")).segments).toEqual([{ start: 2, end: 24 }]);
+    expect(JSON.parse(readFileSync(join(dir, "guest.decisions.json"), "utf8")).inserts[0].path).toBe("media/inserts/1-broll.mp4");
+
+    const checks = preflight(dir, readJob(dir), { recording: join(dir, "guest.mp4"), probe, tools: again.job.tools, config: {} }).checks.filter(
+      (c) => !c.label.startsWith("code") && c.label !== "node packages",
+    );
+    expect(formatReport(checks).text).toEndWith("REPRODUCIBLE");
+  });
+
+  it("leaves the old bundle untouched when the new share fails", async () => {
+    const { reel } = episode(join(TMP, "dean2"));
+    const shares = join(TMP, "roundtrip2");
+    const { dir } = await buildBundle({ input: reel, to: shares, probe, checkCode: false });
+    const before = readFileSync(join(dir, "job.json"), "utf8");
+    unlinkSync(join(TMP, "dean2", "broll.mp4"));
+    await expect(buildBundle({ input: reel, to: shares, replace: true, probe, checkCode: false })).rejects.toThrow("isn't on this computer");
+    expect(readFileSync(join(dir, "job.json"), "utf8")).toBe(before);
+    expect(existsSync(join(dir, "media", "inserts", "1-broll.mp4"))).toBe(true);
+  });
+});
+
+describe("a reel cut from an upscaled clean cut", () => {
+  it("tells how a clean cut was made", () => {
+    const rec = { width: 1280, height: 720 };
+    const hd = { width: 1920, height: 1080 };
+    expect(cleanMethod("/x/ep.clean.mp4", rec, rec)).toBe("none");
+    expect(cleanMethod("/x/ep.clean.x4plus1080p.mp4", hd, rec)).toBe("x4plus");
+    expect(cleanMethod("/x/ep.clean.lanczos1080p.mp4", hd, rec)).toBe("lanczos");
+    const dir = join(TMP, "upscaled");
+    mkdirSync(join(dir, "ep.clean.1080p.upscale-work"), { recursive: true });
+    expect(cleanMethod(join(dir, "ep.clean.1080p.mp4"), hd, rec)).toBeNull();
+    writeFileSync(join(dir, "ep.clean.1080p.upscale-work", "status.json"), JSON.stringify({ settings: { method: "lanczos" } }));
+    expect(cleanMethod(join(dir, "ep.clean.1080p.mp4"), hd, rec)).toBe("lanczos");
+    expect(cleanFileName("ep", { width: 1920, height: 1080, method: "x4plus" })).toBe("ep.clean.x4plus1080p.mp4");
+    expect(cleanFileName("ep", { width: 1280, height: 720, method: "none" })).toBe("ep.clean.mp4");
+  });
+
+  it("pins the upscale, and the rerender redoes it and checks its size", async () => {
+    const src = join(TMP, "hd");
+    const { reel } = episode(src);
+    writeFileSync(join(src, "guest.clean.x4plus1080p.mp4"), bytes(100, 5));
+    const def = JSON.parse(readFileSync(reel, "utf8"));
+    def.episode.clean = "guest.clean.x4plus1080p.mp4";
+    writeFileSync(reel, JSON.stringify(def));
+    const { dir, job } = await buildBundle({ input: reel, to: join(TMP, "hd-shares"), probe, checkCode: false });
+    expect(job.clean).toEqual({ width: 1920, height: 1080, method: "x4plus" });
+    expect(JSON.parse(readFileSync(join(dir, "guest-best-30.reel.json"), "utf8")).episode.clean).toBe("rebuild/guest.clean.x4plus1080p.mp4");
+    expect(cleanCheck(job.clean!)).toMatchObject({ ok: false, warn: true });
+    expect(cleanSizeProblem(job.clean!, { width: 1280, height: 720 })).toContain("crops would be wrong");
+    expect(cleanSizeProblem(job.clean!, { width: 1920, height: 1080 })).toBeNull();
+  });
+
+  it("refuses an upscale it can't name", async () => {
+    const src = join(TMP, "hd2");
+    const { reel } = episode(src);
+    writeFileSync(join(src, "guest.clean.1080p.mp4"), bytes(100, 5));
+    const def = JSON.parse(readFileSync(reel, "utf8"));
+    def.episode.clean = "guest.clean.1080p.mp4";
+    writeFileSync(reel, JSON.stringify(def));
+    await expect(buildBundle({ input: reel, to: join(TMP, "hd2-shares"), probe, checkCode: false })).rejects.toThrow("can't tell how");
+  });
+});
+
+describe("reusing rebuild/", () => {
+  it("only when it was made from the same decisions, recording and clean cut", async () => {
+    const { reel } = episode(join(TMP, "stamp"));
+    const { job } = await buildBundle({ input: reel, to: join(TMP, "stamp-shares"), probe, checkCode: false });
+    const rebuild = join(TMP, "stamp-rebuild");
+    mkdirSync(rebuild, { recursive: true });
+    const stamp = rebuildStamp(job);
+    expect(stampMatches(rebuild, stamp)).toBe(false); // nothing there yet
+    writeFileSync(join(rebuild, STAMP_FILE), JSON.stringify(stamp));
+    expect(stampMatches(rebuild, stamp)).toBe(true);
+    const changed = { ...job, files: job.files.map((f) => (f.role === "decisions" ? { ...f, sha256: "c".repeat(64) } : f)) };
+    expect(stampMatches(rebuild, rebuildStamp(changed))).toBe(false);
+    expect(stampMatches(rebuild, rebuildStamp({ ...job, clean: { width: 1920, height: 1080, method: "lanczos" } }))).toBe(false);
+  });
+});
+
+describe("a damaged or hostile job.json", () => {
+  it("refuses paths that could leave the bundle or public/ on any OS", () => {
+    for (const p of ["../x", "a/../../x", "/etc/x", "C:/x", "C:\\x", "media\\inserts\\x.mp4", "audio/private/..\\..\\src\\x.tsx", "a//b", ""])
+      expect(safeRelPath(p)).toBe(false);
+    expect(safeRelPath("media/inserts/1-broll.mp4")).toBe(true);
+  });
+
+  it("checks names and the entries the rerender reads", async () => {
+    const { reel } = episode(join(TMP, "hostile"));
+    const { job } = await buildBundle({ input: reel, to: join(TMP, "hostile-shares"), probe, checkCode: false });
+    expect(jobProblems({ ...job, name: "../evil" })[0]).toContain("letters, digits");
+    expect(jobProblems({ ...job, files: [{ ...job.files[0], publicPath: "audio/private/..\\..\\src\\x.tsx" }] }).join()).toContain("private list");
+    expect(jobProblems({ ...job, files: job.files.filter((f) => f.role !== "reel") }).join()).toContain("no reel entry guest-best-30.reel.json");
+    expect(jobProblems({ ...job, clean: undefined }).join()).toContain("clean cut isn't pinned");
+  });
+});
+
+describe("node packages", () => {
+  it("compares what's installed with package.json's pins", () => {
+    const root = join(TMP, "pkgs");
+    mkdirSync(join(root, "node_modules", "remotion"), { recursive: true });
+    writeFileSync(join(root, "package.json"), JSON.stringify({ dependencies: { remotion: "4.0.410", zod: "^3.0.0" } }));
+    writeFileSync(join(root, "node_modules", "remotion", "package.json"), JSON.stringify({ version: "4.0.400" }));
+    expect(packagesCheck(root).detail![0]).toBe("remotion 4.0.400 (want 4.0.410)");
+    writeFileSync(join(root, "node_modules", "remotion", "package.json"), JSON.stringify({ version: "4.0.410" }));
+    expect(packagesCheck(root).ok).toBe(true);
+    expect(dirname(root)).toBe(TMP);
   });
 });
