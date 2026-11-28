@@ -21,6 +21,8 @@ export type PrivateMedia = {
   why: string;
   /** Where it comes from: the command that makes it, or who has it. */
   from: string;
+  /** The render writes it itself (a reel's cut), so a share (#60) doesn't carry it. */
+  generated?: boolean;
 };
 
 export const PRIVATE_MEDIA: PrivateMedia[] = [
@@ -43,6 +45,7 @@ export const PRIVATE_MEDIA: PrivateMedia[] = [
     path: "reel/",
     why: "footage: the cut interview a reel plays (SessionReel)",
     from: "`bun run reel <name>.reel.json` writes it from a sesh-edit clean cut (longform/README.md, \"A reel from an episode\")",
+    generated: true,
   },
   {
     path: "fort-riddim/",

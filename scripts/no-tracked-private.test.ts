@@ -15,6 +15,9 @@ const PRIVATE = [
   /\.srt$/i,
   /\.part$/i,
   /\.work\//i,
+  /(^|\/)job\.json$/i, // a share bundle's manifest (#60)
+  /\.shared-input\.json$/i,
+  /(^|\/)share\.local\.json$/i,
 ];
 
 // A real share link: a new-style link with rlkey= and its long random key, an
@@ -48,7 +51,11 @@ describe("no private batch material in git", () => {
         "oscar.edited.srt",
         "oscar.part",
         "longform/oscar.work/transcript.json",
+        "shares/guest-best-30/job.json",
+        "rebuild/oscar.shared-input.json",
+        "share.local.json",
         "package.json",
+        "scripts/share/job.ts",
         "longform/src/sesh_edit/batch.py",
         "longform/tests/test_batch.py",
         "src/ident/ids.ts",
@@ -62,6 +69,9 @@ describe("no private batch material in git", () => {
       "oscar.edited.srt",
       "oscar.part",
       "longform/oscar.work/transcript.json",
+      "shares/guest-best-30/job.json",
+      "rebuild/oscar.shared-input.json",
+      "share.local.json",
     ]);
   });
 

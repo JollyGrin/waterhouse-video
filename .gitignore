@@ -66,3 +66,9 @@ batch*.lock
 *.review.txt
 *.work/
 *.upscale-work/
+
+# Share bundles (#60) name the guest, quote the interview and may hold a Dropbox link:
+# they live in the shared Dropbox folder, never here. share.local.json is per computer.
+job.json
+*.shared-input.json
+share.local.json
