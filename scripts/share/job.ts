@@ -538,6 +538,8 @@ export const CODE_EXCLUDES = [
   // job.ts and rerender.ts decide how the render runs, so they stay pinned
   "scripts/share/share.ts",
   "scripts/share/preflight.ts",
+  "scripts/share/auto.ts",
+  ".gitignore",
 ];
 
 /**

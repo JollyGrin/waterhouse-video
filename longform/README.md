@@ -333,7 +333,7 @@ and the list of what's missing or different (exit 1):
 
 - each part's commit is on this computer and the code that part depends on matches it:
   the edit (and every clean cut) against `longform/`, each reel against everything else
-  (docs, tests, `.github/`, `share.ts` and `preflight.ts` never count). A part without a
+  (docs, tests, `.github/`, `.gitignore`, `share.ts`, `preflight.ts` and `auto.ts` never count). A part without a
   recorded commit is a warning. If one differs, rerender refuses it and names the commit:
   `git worktree add ../share-<sha> <sha>`, `bun install` and `cd longform && uv sync`
   there, then rerender `--only` that part from it;
